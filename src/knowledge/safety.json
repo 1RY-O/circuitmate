@@ -1,0 +1,22 @@
+[
+  {
+    "id": "mains",
+    "trigger": ["mains", "230v", "120v", "wall ac", "relay module with mains"],
+    "message": "Stop — mains voltage can kill. Do not breadboard mains or open supplies. Get an experienced adult or professional to supervise; use only an enclosed, fused module."
+  },
+  {
+    "id": "lipo",
+    "trigger": ["lipo", "lithium", "18650", "puffy", "swollen", "hot battery"],
+    "message": "Stop. A puffy or hot lithium pack can catch fire — unplug it, move it to a non-flammable surface, and get an experienced adult. Never puncture it or charge it unattended."
+  },
+  {
+    "id": "short",
+    "trigger": ["burning", "smoke", "melt", "very hot", "smell"],
+    "message": "Burning smell or hot parts = power off now, check for shorts (continuity beep between VCC and GND) before repowering."
+  },
+  {
+    "id": "reverse_polarity",
+    "trigger": ["reverse", "backwards power", "plugged in backwards"],
+    "message": "Reverse polarity kills boards fast. Power off, verify +/− with multimeter, add a series diode next time for protection."
+  }
+]

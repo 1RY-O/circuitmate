@@ -1,0 +1,22 @@
+{
+  "name": "circuitmate",
+  "version": "0.1.0",
+  "description": "CircuitMate — hands-busy electronics/IoT/robotics voice copilot (AssemblyAI Voice Agent API + browser demo)",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "publish": "node scripts/publish.mjs",
+    "check:voice": "node scripts/voice-loop-check.mjs",
+    "test": "tsx --test test/*.test.ts"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^22.7.4",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.2"
+  }
+}

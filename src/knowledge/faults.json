@@ -1,0 +1,53 @@
+[
+  {
+    "id": "no_power",
+    "symptom": "nothing turns on / no LEDs",
+    "ask": ["Is the USB cable power+data or charge-only? Try another cable.", "Measure 5V rail to GND with multimeter — what do you read?", "Are the breadboard red/blue rails split in the middle?"],
+    "causes": ["charge-only USB cable", "rail split mid-board not bridged", "regulator in dropout (9V battery dead / barrel <7V)", "GND not common between supplies"]
+  },
+  {
+    "id": "mcu_resets",
+    "symptom": "MCU resets when motor / WiFi / servo activates",
+    "ask": ["Does it reset only under load?", "What powers the load — same 5V pin as MCU?", "How long/thin is the USB cable?"],
+    "causes": ["brownout: motor/servo on MCU rail", "weak USB cable", "missing bulk capacitor (add 470-1000µF at driver input)"],
+    "fix": "Separate supply for load, common GND, short thick USB, bulk cap."
+  },
+  {
+    "id": "led_dead",
+    "symptom": "LED won't light",
+    "ask": ["Is that the Arduino's built-in LED, or an external LED on a breadboard?", "Which board and pin is it on, and what is the supply voltage?", "Long leg toward + through a resistor — what value?"],
+    "causes": ["onboard LED never driven (pin still INPUT or wrong sketch — test with Blink)", "reversed LED", "missing/wrong resistor (needs Vs, Vf and current before computing)", "open jumper or split breadboard rail"]
+  },
+  {
+    "id": "gpio_weird",
+    "symptom": "input floats / random triggers",
+    "ask": ["INPUT or INPUT_PULLUP?", "Is there a 10k pull-up/down?", "Long unshielded wire near motors?"],
+    "causes": ["floating input", "no common GND with sensor", "EMI from motors"],
+    "fix": "Use INPUT_PULLUP or 10k resistor, shorten wires, common GND."
+  },
+  {
+    "id": "esp32_boot",
+    "symptom": "ESP32 boot loops / won't flash",
+    "ask": ["Anything on GPIO0/2/12/15? Disconnect and reboot.", "Holding BOOT button during flash?", "Serial baud 115200 — what does the panic say?"],
+    "causes": ["strapping pin held wrong at boot", "weak supply brownout", "ADC2 + WiFi conflict / watchdog from blocking loop"]
+  },
+  {
+    "id": "sensor_nan",
+    "symptom": "DHT / ultrasonic / I2C garbage or NaN",
+    "ask": ["Common GND? Pull-up present? Cable length?", "I2C scan — does the address appear?", "DHT: 2s between reads?"],
+    "causes": ["missing GND/pull-up", "5V echo into 3V3 pin (needs divider)", "wrong address / bus speed too high"]
+  },
+  {
+    "id": "mqtt_down",
+    "symptom": "MQTT won't connect / no messages",
+    "ask": ["Can you ping the broker IP from a laptop on the same WiFi?", "Same subnet? Guest/AP isolation?", "Topic string exact incl. slashes/case?"],
+    "causes": ["AP isolation / wrong subnet", "duplicate client ID", "port 1883 vs 8883 mismatch", "auth/ACL or payload format mismatch"]
+  },
+  {
+    "id": "servo_jitter",
+    "symptom": "servo jitters / hums / MCU resets",
+    "ask": ["Servo on separate 5V 2A supply with common GND?", "50Hz signal pin only from MCU?"],
+    "causes": ["servo powered from MCU rail", "PWM freq wrong (servo needs 50Hz pulses)", "underrated supply"],
+    "fix": "Separate 5V supply, common GND, correct 50Hz servo pulses."
+  }
+]

@@ -1,0 +1,69 @@
+{
+  "arduino_uno": {
+    "id": "arduino_uno",
+    "name": "Arduino Uno (ATmega328P)",
+    "logic_v": 5,
+    "supply": "USB 5V or barrel jack 7-12V (onboard 5V/3V3 regs). Do NOT feed 5V into 5V pin while USB connected.",
+    "gpio": "14 digital (6 PWM: 3,5,6,9,10,11), 6 analog in. Max ~20mA per pin, ~200mA total.",
+    "gotchas": ["No WiFi/BLE onboard", "5V logic — level-shift for 3V3 sensors", "CH340 clones need driver"]
+  },
+  "esp32": {
+    "id": "esp32",
+    "name": "ESP32 DevKit",
+    "logic_v": 3.3,
+    "supply": "USB 5V in, 3V3 rail. 5V-tolerant: NO — divide/shift 5V signals down.",
+    "gpio": "Usable: most GPIO except strapping pins 0/2/12/15 at boot and 6-11 (flash). ADC1 usable with WiFi, ADC2 not.",
+    "gotchas": ["GPIO0/2/12/15 strapping — don't pull wrong at boot", "Brownouts on weak USB — add bulk cap, short thick cable", "ADC2 unusable with WiFi on"]
+  },
+  "breadboard": {
+    "id": "breadboard",
+    "name": "Solderless breadboard",
+    "rails": "Red/blue rails run LENGTHWISE and are often SPLIT in the middle — bridge them with jumpers.",
+    "rows": "Each numbered row: 5 holes connected (abcde | fghij), center gap isolates halves.",
+    "gotchas": ["Rails split mid-board", "High-current motors melt contacts — use screw terminals", "Wobbly Dupont jumpers cause intermittents"]
+  },
+  "led": {
+    "id": "led",
+    "name": "LED + series resistor",
+    "polarity": "Long leg = anode (+). Flat side / short leg = cathode (-). Reversed LED blocks, usually survives at 5V.",
+    "resistor_rule": "(Vsupply - Vf) / I. Red Vf~2.0V, green/blue/white Vf~3.0-3.3V. Target 5-15mA for indicators.",
+    "examples": ["5V + red LED @10mA -> (5-2)/0.01 = 300Ω → use 330Ω", "5V + white LED @10mA -> (5-3.2)/0.01 = 180Ω → use 220Ω", "3V3 + red LED @8mA -> (3.3-2)/0.008 = 162Ω → use 180Ω"]
+  },
+  "gpio": {
+    "id": "gpio",
+    "name": "GPIO basics",
+    "rules": ["Set pinMode OUTPUT/INPUT explicitly", "Never drive a pin shorted to GND/VCC", "Floating inputs drift — use INPUT_PULLUP or external 10k", "One pin ≤20mA; drive motors/relays via transistor/MOSFET, never directly"]
+  },
+  "sensors": {
+    "id": "sensors",
+    "name": "Common sensors",
+    "dht22": "Needs 3V3-5V, 10k pull-up on data, 2s between reads. NaN = timing/wiring, not broken sensor.",
+    "hc_sr04": "5V device, ECHO returns 5V — divide to 3V3 for ESP32. Needs common GND. Min ~2cm, beam ~15°.",
+    "i2c": "SDA/SCL need pull-ups (many modules have them). Common GND required. Scan address first (0x27/0x3C/0x68/0x76 common).",
+    "analog": "ESP32 ADC is nonlinear near rails; average 16-64 samples. Keep sensor GND star-connected."
+  },
+  "motors": {
+    "id": "motors",
+    "name": "Motors + drivers",
+    "rules": ["NEVER from Arduino 5V pin or breadboard rails — separate supply with common GND", "Small DC: L298N (lossy) or TB6612 (better). Servo: separate 5V 2A+, signal pin only from MCU", "Back-EMF: driver boards include diodes; bare transistors need flyback diode", "Stalled motor browns out MCU — symptom: resets when motor starts"]
+  },
+  "pwm": {
+    "id": "pwm",
+    "name": "PWM",
+    "arduino": "analogWrite(pin, 0-255) on 3,5,6,9,10,11. ~490Hz (980Hz on 5,6).",
+    "esp32": "ledcAttach(pin, freq, resolution). LED dim ~5kHz, motor ~20kHz (above audible), servo = 50Hz pulses not duty%.",
+    "gotchas": ["PWM pin must be PWM-capable", "Shared timers change multiple pins", "Dim LED flicker on camera = normal aliasing"]
+  },
+  "mqtt": {
+    "id": "mqtt",
+    "name": "MQTT (ESP32 IoT)",
+    "checklist": ["Same WiFi subnet + reachable broker IP (ping it)", "Unique client ID per device", "Correct port 1883 (no TLS) vs 8883 (TLS)", "Topic spelling/case must match exactly; check leading slash", "QoS0 + retained LWT for beginners; add reconnect backoff"],
+    "gotchas": ["University/cafe AP isolation blocks LAN MQTT", "String payload vs JSON mismatch", "Broker ACL blocking publish"]
+  },
+  "code": {
+    "id": "code",
+    "name": "Beginner firmware issues (C/C++ Arduino + MicroPython)",
+    "arduino": ["Missing pinMode / Serial.begin baud mismatch", "delay() blocking MQTT/WiFi — use millis() state machine", "String concatenation fragments RAM → resets; prefer char buffers", "Float in ISR / Serial.print in ISR crashes"],
+    "micropython": ["Boot.py vs main.py order", "Blocking connect loop with no timeout bricks headless boards", "Pin numbering: machine.Pin(2) is GPIO2, not D2 label"]
+  }
+}
