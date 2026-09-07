@@ -4,8 +4,11 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="description" content="CircuitMate — hands-free bench copilot for electronics, IoT, robotics and coding. Voice diagnostics over the AssemblyAI Voice Agent API." />
+<meta name="theme-color" content="#06080c" />
 <title>CircuitMate — Bench Copilot</title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+<link rel="preload" href="/fonts/SpaceGrotesk.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="/fonts/JetBrainsMono.woff2" as="font" type="font/woff2" crossorigin />
 <link rel="stylesheet" href="/styles.css" />
 </head>
 <body data-state="ready">
@@ -15,9 +18,13 @@
   <span class="demo-banner-text">Voice engine offline — no <code>ASSEMBLYAI_API_KEY</code> on server. Diagnostic tools run locally; type below to drive them.</span>
 </div>
 
-<header class="topbar">
+<header class="topbar" data-boot="down">
   <div class="brand">
-    <span class="brand-mark" aria-hidden="true">◈</span>
+    <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true">
+      <path class="brand-mark-path" d="M12 3.5 20.5 12 12 20.5 3.5 12Z" fill="none"/>
+      <circle class="brand-mark-dot" cx="12" cy="12" r="2.4"/>
+      <path class="brand-mark-tick" d="M12 6.5V9M12 15v2.5M6.5 12H9M15 12h2.5" fill="none"/>
+    </svg>
     <span class="brand-name">CIRCUITMATE</span>
     <span class="brand-sub">BENCH&nbsp;COPILOT</span>
   </div>
@@ -29,26 +36,94 @@
 </header>
 
 <main class="bench">
+
+  <!-- CENTER · VOICE CHANNEL — the heart of the product -->
+  <section class="console" aria-label="Voice console" data-boot="up">
+    <div class="console-head">
+      <div class="console-id">
+        <h2 class="panel-title">VOICE CHANNEL</h2>
+        <p class="console-line">Describe the fault<span class="console-line-accent"> — fix it hands-free.</span></p>
+      </div>
+      <div class="status-readout">
+        <span id="stateDot" class="status-dot" aria-hidden="true"></span>
+        <span id="stateText" class="status-text" aria-live="polite">IDLE</span>
+      </div>
+    </div>
+    <p id="stateSub" class="status-sub">press the core to open the channel</p>
+
+    <div class="scope-wrap" id="scopeWrap">
+      <canvas id="scope" aria-hidden="true"></canvas>
+      <div class="scope-channels mono" aria-hidden="true">
+        <span class="ch ch-in">CH1 · MIC</span>
+        <span class="ch ch-out">CH2 · AGENT</span>
+      </div>
+      <button id="coreBtn" class="core" aria-label="Start call — open voice channel">
+        <span class="core-ripple r1" aria-hidden="true"></span>
+        <span class="core-ripple r2" aria-hidden="true"></span>
+        <span class="core-ring" aria-hidden="true"></span>
+        <span class="core-body">
+          <svg class="core-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path class="ic-mic" d="M12 3a3 3 0 0 1 3 3v5a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3Z"/>
+            <path class="ic-stem" d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7" fill="none"/>
+          </svg>
+          <span id="coreLabel" class="core-label">START</span>
+        </span>
+      </button>
+      <span class="scope-state mono" aria-hidden="true">SYS · <span id="scopeState">IDLE</span></span>
+    </div>
+
+    <div class="meters" data-boot="up-late">
+      <div class="meter">
+        <span class="meter-label mono">MIC</span>
+        <div class="meter-bar"><div id="micLevel" class="meter-fill in"></div></div>
+      </div>
+      <div class="meter">
+        <span class="meter-label mono">AGENT</span>
+        <div class="meter-bar"><div id="agentLevel" class="meter-fill out"></div></div>
+      </div>
+    </div>
+
+    <div class="transport" role="group" aria-label="Call transport" data-boot="up-late">
+      <button id="startBtn" class="btn go"><span class="btn-dot" aria-hidden="true"></span>START CALL</button>
+      <button id="endBtn" class="btn stop" disabled><span class="btn-dot" aria-hidden="true"></span>END</button>
+      <button id="interruptBtn" class="btn" disabled>INTERRUPT</button>
+      <button id="mockBtn" class="btn small" title="Explicit offline tool test — never automatic">OFFLINE</button>
+    </div>
+    <div id="transportLog" class="transport-log mono" aria-hidden="true">idle</div>
+  </section>
+
   <!-- LEFT · DIAGNOSTIC CHANNEL -->
-  <section class="panel diag" aria-labelledby="diagTitle">
+  <section class="panel diag" aria-labelledby="diagTitle" data-boot="up">
     <h2 class="panel-title" id="diagTitle">DIAGNOSTIC CHANNEL</h2>
 
     <div class="ro-stack">
       <div class="ro">
-        <span class="ro-key">IDENTIFIED</span>
-        <div id="roKnown" class="ro-chips"><span class="chip chip-empty">—</span></div>
+        <span class="ro-idx" aria-hidden="true">01</span>
+        <div class="ro-main">
+          <span class="ro-key">IDENTIFIED</span>
+          <div id="roKnown" class="ro-chips"><span class="chip chip-empty">—</span></div>
+        </div>
       </div>
       <div class="ro">
-        <span class="ro-key">SYMPTOM</span>
-        <div id="roUnknown" class="ro-val is-dim">awaiting report</div>
+        <span class="ro-idx" aria-hidden="true">02</span>
+        <div class="ro-main">
+          <span class="ro-key">SYMPTOM</span>
+          <div id="roUnknown" class="ro-val is-dim">awaiting report</div>
+        </div>
       </div>
       <div class="ro">
-        <span class="ro-key">HYPOTHESIS</span>
-        <div id="roHypo" class="ro-val is-dim">awaiting information</div>
+        <span class="ro-idx" aria-hidden="true">03</span>
+        <div class="ro-main">
+          <span class="ro-key">HYPOTHESIS</span>
+          <div id="roHypo" class="ro-val is-dim">awaiting information</div>
+        </div>
       </div>
       <div class="ro ro-next">
-        <span class="ro-key">NEXT ACTION</span>
-        <div id="roNext" class="ro-val is-dim">press the core to open the channel</div>
+        <span class="ro-idx" aria-hidden="true">04</span>
+        <div class="ro-main">
+          <span class="ro-key">NEXT ACTION</span>
+          <div id="roNext" class="ro-val is-dim">press the core to open the channel</div>
+        </div>
       </div>
     </div>
 
@@ -67,72 +142,37 @@
     <div id="toolBus" class="toolbus mono"><div class="tb-row dim">idle</div></div>
   </section>
 
-  <!-- CENTER · VOICE CONSOLE -->
-  <section class="panel console" aria-label="Voice console">
-    <div class="console-head">
-      <h2 class="panel-title">VOICE BUS</h2>
-      <div class="status-readout">
-        <span id="stateDot" class="status-dot" aria-hidden="true"></span>
-        <span id="stateText" class="status-text" aria-live="polite">READY</span>
-      </div>
-    </div>
-    <p id="stateSub" class="status-sub">press the core to open the channel</p>
-
-    <div class="scope-wrap">
-      <canvas id="scope" aria-hidden="true"></canvas>
-      <div class="scope-channels mono" aria-hidden="true">
-        <span class="ch ch-in">CH1 · MIC</span>
-        <span class="ch ch-out">CH2 · AGENT</span>
-      </div>
-      <button id="coreBtn" class="core" aria-label="Start call — open voice channel">
-        <span class="core-ring" aria-hidden="true"></span>
-        <span class="core-body">
-          <svg class="core-icon" viewBox="0 0 24 24" aria-hidden="true">
-            <path class="ic-mic" d="M12 3a3 3 0 0 1 3 3v5a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3Z"/>
-            <path class="ic-stem" d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7" fill="none"/>
-          </svg>
-          <span id="coreLabel" class="core-label">START</span>
-        </span>
-      </button>
-    </div>
-
-    <div class="meters">
-      <div class="meter">
-        <span class="meter-label mono">MIC</span>
-        <div class="meter-bar"><div id="micLevel" class="meter-fill in"></div></div>
-      </div>
-      <div class="meter">
-        <span class="meter-label mono">AGENT</span>
-        <div class="meter-bar"><div id="agentLevel" class="meter-fill out"></div></div>
-      </div>
-    </div>
-
-    <div class="transport" role="group" aria-label="Call transport">
-      <button id="startBtn" class="btn go"><span class="btn-dot" aria-hidden="true"></span>START CALL</button>
-      <button id="endBtn" class="btn stop" disabled><span class="btn-dot" aria-hidden="true"></span>END</button>
-      <button id="interruptBtn" class="btn" disabled>INTERRUPT</button>
-      <button id="mockBtn" class="btn small" title="Explicit offline tool test — never automatic">OFFLINE</button>
-    </div>
-    <div id="transportLog" class="transport-log mono">idle</div>
-  </section>
-
-  <!-- CENTER-BOTTOM · TOOL READOUT -->
-  <section class="panel readout" aria-labelledby="readoutTitle">
-    <h2 class="panel-title" id="readoutTitle">TOOL READOUT</h2>
-    <div id="cards" class="cards"><div class="empty dim">Resistor math, component specs and debug steps land here.</div></div>
-  </section>
-
   <!-- RIGHT · TRANSCRIPT -->
-  <section class="panel transcript" aria-labelledby="trTitle">
+  <section class="panel transcript" aria-labelledby="trTitle" data-boot="up">
     <h2 class="panel-title" id="trTitle">TRANSCRIPT <span class="panel-title-note">live captions · barge-in aware</span></h2>
-    <div id="log" class="log" role="log" aria-live="polite" aria-label="Live conversation transcript"></div>
+    <div id="log" class="log" role="log" aria-live="polite" aria-label="Live conversation transcript">
+      <div id="logEmpty" class="log-empty">
+        <svg class="log-empty-glyph" viewBox="0 0 64 24" aria-hidden="true">
+          <path class="lg-wave" d="M2 12h6l3-8 5 16 5-20 5 24 5-16 4 4h7" fill="none"/>
+        </svg>
+        <p class="log-empty-title">No captions yet</p>
+        <p class="log-empty-sub">Press the core and describe the fault — everything said on the channel lands here, hands-free.</p>
+      </div>
+    </div>
     <form id="textForm" class="textrow">
       <input id="textInput" placeholder="type to talk…" autocomplete="off" aria-label="Text input for demo mode" />
       <button class="btn small" type="submit">SEND</button>
     </form>
   </section>
 
-
+  <!-- BOTTOM-CENTER · TOOL READOUT -->
+  <section class="panel readout" aria-labelledby="readoutTitle" data-boot="up-late">
+    <h2 class="panel-title" id="readoutTitle">TOOL READOUT</h2>
+    <div id="cards" class="cards">
+      <div class="cards-empty">
+        <svg class="cards-empty-glyph" viewBox="0 0 48 16" aria-hidden="true">
+          <path class="cg-path" d="M1 8h8l2-5 3 10 3-10 3 10 3-10 2 5h8" fill="none"/>
+          <circle class="cg-dot" cx="1" cy="8" r="1.6"/><circle class="cg-dot" cx="47" cy="8" r="1.6"/>
+        </svg>
+        <p class="cards-empty-text">Resistor math, component specs and debug steps land here as the agent calls tools.</p>
+      </div>
+    </div>
+  </section>
 
 </main>
 
@@ -144,6 +184,8 @@
   <button id="mockToggle" class="foot-link" type="button">toggle demo mode</button>
 </footer>
 
+<script defer src="/vendor/motion.js"></script>
+<script defer src="/ui-motion.js"></script>
 <script src="/app.js" type="module"></script>
 </body>
 </html>

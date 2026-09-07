@@ -38,7 +38,7 @@ verbatim-symptom tool call, a disambiguating spoken answer, audio chunks, clean 
 
 ## 2-minute judge script
 
-1. START CALL → greet. Say: *“white LED on 5 volts, what resistor?”* → calls `calc_circuit`, speaks “220 ohm”, readout card shows math.
+1. START CALL → greet. Say: *“white LED on 5 volts, what resistor?”* → calls `calc_circuit`, speaks “180 ohm”, readout card shows math.
 2. Say: *“it’s still dim, nothing lights”* → calls `debug_step`, asks ONE question (polarity? rail split?).
 3. Talk over the reply → barge-in cuts audio (`reply.done: interrupted`, buffer flushed), state lamp flashes INTERRUPTED → LISTENING.
 

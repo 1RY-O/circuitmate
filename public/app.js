@@ -48,25 +48,34 @@ function setMode(m, label) {
 let cfg = { agentId: "", mock: true, wsUrl: "wss://agents.assemblyai.com/v1/ws" };
 let ws = null, audioCtx = null, micStream = null, worklet = null, analyser = null, agentAnalyser = null;
 let ready = false, cleanEnd = false, sessionId = null, lastEvent = null, pendingTools = [];
+// Temporary stage timing (offline-safe, client-observable legs only):
+// speech.stopped -> reply.started ~= AssemblyAI STT+LLM+TTS turn time;
+// reply.started -> first reply.audio ~= TTS first-byte time.
+let thinkT0 = 0, replyT0 = 0;
 let playbackTime = 0, playSources = [], userRow = null, agentRow = null, replyWatchdog = null, replyAudioCount = 0;
 
 // ---- UI state machine: one signal color drives the whole console ----
 let uiState = "ready", micEnv = 0, agentEnv = 0, stateTimer = null, micData = null, agentData = null;
 
 function setButtons() {
-  const inCall = ["connecting", "listening", "thinking", "speaking", "interrupted"].includes(uiState);
+  const inCall = ["connecting", "listening", "transcribing", "thinking", "speaking", "interrupted"].includes(uiState);
   startBtn.disabled = !(uiState === "ready" || uiState === "error");
   endBtn.disabled = !inCall;
   interruptBtn.disabled = !ready;
   coreLabel.textContent = inCall ? "END" : "START";
   coreBtn.setAttribute("aria-label", inCall ? "End call — close voice channel" : "Start call — open voice channel");
 }
+// display names for the voice states (data-state keys stay unchanged)
+const DISPLAY_STATE = { READY: "IDLE", SPEAKING: "RESPONDING" };
 function setState(s, sub) {
   clearTimeout(stateTimer);
   uiState = s.toLowerCase();
   document.body.dataset.state = uiState;
-  stateText.textContent = s;
-  if (sub) stateSub.textContent = sub;
+  const label = DISPLAY_STATE[s] ?? s;
+  const scopeState = document.getElementById("scopeState"); // bezel readout stays in sync even without the motion layer
+  if (scopeState) scopeState.textContent = label;
+  if (window.CM) CM.enterState(label, sub); // crossfaded by the choreography layer
+  else { stateText.textContent = label; if (sub) stateSub.textContent = sub; }
   setButtons();
 }
 function setStateThen(s, sub, backTo, backSub, ms) {
@@ -100,7 +109,10 @@ function drawTrace(data, color, gain) {
   }
   sctx.strokeStyle = color;
   sctx.lineWidth = Math.max(1, scopeH / 240);
+  sctx.shadowColor = color; // phosphor glow
+  sctx.shadowBlur = reduceMotion ? 0 : 7;
   sctx.stroke();
+  sctx.shadowBlur = 0;
 }
 
 function drawScope(ts) {
@@ -169,6 +181,7 @@ requestAnimationFrame(drawScope);
 const TAGS = { u: "USER", a: "CIRCUITMATE", sys: "SYSTEM", tool: "TOOL" };
 const stamp = () => new Date().toTimeString().slice(0, 8);
 function mkRow(kind, demo = false) {
+  document.getElementById("logEmpty")?.remove(); // leave the designed empty state
   const row = document.createElement("div");
   row.className = "tr " + kind + (demo ? " demo" : "");
   const t = document.createElement("span"); t.className = "tr-time"; t.textContent = stamp();
@@ -178,6 +191,7 @@ function mkRow(kind, demo = false) {
   logEl.appendChild(row);
   while (logEl.children.length > 140) logEl.removeChild(logEl.firstChild);
   logEl.scrollTop = logEl.scrollHeight;
+  window.CM?.rowIn(row);
   return { row, tx };
 }
 function log(kind, text, demo = false) { mkRow(kind, demo).tx.textContent = text; }
@@ -204,16 +218,17 @@ function renderKnown() {
   for (const k of diag.known) {
     const c = document.createElement("span"); c.className = "chip"; c.textContent = k;
     roKnown.appendChild(c);
+    window.CM?.chipIn(c);
   }
 }
 function addKnown(label) {
   if (diag.known.has(label)) return;
-  diag.known.add(label); renderKnown(); flash(roKnown.parentElement);
+  diag.known.add(label); renderKnown(); flash(roKnown.closest(".ro") ?? roKnown.parentElement);
 }
 function setVal(el, v, placeholder) {
   el.textContent = v || placeholder;
   el.classList.toggle("is-dim", !v);
-  if (v) flash(el.parentElement);
+  if (v) { flash(el.closest(".ro") ?? el.parentElement); window.CM?.valueIn(el); }
 }
 function renderProgress() {
   progFill.style.width = Math.round((diag.step / diag.total) * 100) + "%";
@@ -278,6 +293,7 @@ function card(title, body, warn = false, kind = "info") {
   d.append(h, pre);
   cardsEl.prepend(d);
   while (cardsEl.children.length > 12) cardsEl.removeChild(cardsEl.lastChild);
+  window.CM?.cardIn(d);
 }
 
 // ---- Client-side tools (same KB as server; HTTP tools require public https hosts,
@@ -361,11 +377,15 @@ function onEvent(msg) {
       break;
     case "transcript.user.delta":
       lastEvent = msg.type;
-      if (!userRow) { userRow = mkRow("u"); userRow.row.classList.add("partial"); }
+      if (!userRow) {
+        userRow = mkRow("u"); userRow.row.classList.add("partial");
+        setState("TRANSCRIBING", "capturing your turn…");
+      }
       userRow.tx.textContent = msg.text; // full-so-far, replace not append
       break;
     case "input.speech.stopped":
       lastEvent = msg.type;
+      thinkT0 = performance.now();
       setState("THINKING", "decoding turn…");
       break;
     case "transcript.user":
@@ -376,6 +396,9 @@ function onEvent(msg) {
       break;
     case "reply.started":
       lastEvent = msg.type;
+      replyT0 = performance.now();
+      if (thinkT0) transportLog.textContent += ` (+${Math.round(replyT0 - thinkT0)}ms since speech end)`;
+      thinkT0 = 0;
       agentRow = mkRow("a"); agentRow.row.classList.add("partial");
       replyAudioCount = 0;
       setState("SPEAKING", "playing reply — talk to barge in");
@@ -388,6 +411,9 @@ function onEvent(msg) {
       }, 6000);
       break;
     case "reply.audio":
+      if (replyAudioCount === 0 && replyT0) {
+        transportLog.textContent = `reply.audio (+${Math.round(performance.now() - replyT0)}ms since reply start)`;
+      }
       replyAudioCount++;
       playChunk(msg.data);
       break;
