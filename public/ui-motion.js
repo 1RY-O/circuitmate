@@ -54,8 +54,6 @@
           { opacity: [0, 1], transform: ["scale(.55)", "scale(1)"] },
           { duration: 520, easing: EASE_POP, delay: 450 });
       }
-      const scopeWrap = document.getElementById("scopeWrap");
-      if (core && scopeWrap) coreMagnet(scopeWrap, core);
 
       // safety net: nothing may stay invisible if an animation never ran
       setTimeout(() => {
@@ -97,8 +95,9 @@
       }
     }
     if (dot && ok()) {
-      animate(dot, { transform: ["scale(1)", "scale(1.45)", "scale(1)"] },
-        { duration: 320, easing: "ease-out", fill: "both" });
+      animate(dot,
+        { opacity: [1, .55, 1], transform: ["scale(1)", "scale(1.06)", "scale(1)"] },
+        { duration: 380, easing: "ease-in-out", fill: "both" });
     }
 
     const s = document.getElementById("stateSub");
@@ -125,45 +124,29 @@
   function rowIn(row) {
     if (!ok()) return;
     animate(row,
-      { opacity: [0, 1], transform: ["translateX(-10px)", "translateX(0px)"] },
+      { opacity: [0, 1], transform: ["translateX(-6px)", "translateX(0px)"] },
       { duration: 300, easing: EASE_SOFT });
   }
   function chipIn(chip) {
     if (!ok()) return;
     animate(chip,
-      { opacity: [0, 1], transform: ["scale(.7)", "scale(1)"] },
+      { opacity: [0, 1], transform: ["scale(.85)", "scale(1)"] },
       { duration: 260, easing: EASE_POP });
   }
   function cardIn(card) {
     if (!ok()) return;
     animate(card,
-      { opacity: [0, 1], transform: ["translateY(10px)", "translateY(0px)"] },
+      { opacity: [0, 1], transform: ["translateY(8px)", "translateY(0px)"] },
       { duration: 300, easing: EASE_SOFT });
   }
   function valueIn(el) {
     if (!ok()) return;
     animate(el,
-      { opacity: [0, 1], transform: ["translateY(5px)", "translateY(0px)"] },
+      { opacity: [0, 1], transform: ["translateY(4px)", "translateY(0px)"] },
       { duration: 220, easing: "ease-out" });
   }
 
-  // ---- magnetic core: subtle pull toward the pointer, springs home ----
-  // WAAPI can't spring a transform smoothly on every pointermove; a CSS
-  // transition on transform gives the same soft follow + return feel.
-  function coreMagnet(scopeWrap, core) {
-    if (!ok() || !matchMedia("(pointer: fine)").matches) return;
-    const clamp = (v) => Math.max(-9, Math.min(9, v));
-    core.style.transition = "transform 0.35s cubic-bezier(0.22, 1, 0.36, 1)";
-    scopeWrap.addEventListener("pointermove", (e) => {
-      const r = core.getBoundingClientRect();
-      core.style.transform = `translate(${clamp((e.clientX - (r.left + r.width / 2)) * 0.05)}px, ${clamp((e.clientY - (r.top + r.height / 2)) * 0.05)}px)`;
-    });
-    scopeWrap.addEventListener("pointerleave", () => {
-      core.style.transform = "translate(0px, 0px)";
-    });
-  }
-
-  window.CM = { boot, enterState, rowIn, chipIn, cardIn, valueIn, coreMagnet };
+  window.CM = { boot, enterState, rowIn, chipIn, cardIn, valueIn };
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
   else boot();
 })();

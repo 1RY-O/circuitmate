@@ -136,25 +136,64 @@ new ResizeObserver(() => {
   scopeW = scope.width; scopeH = scope.height;
 }).observe(scope);
 
+// ---- core ring readout — small canvas layered over the mic core ----
+const coreSignal = document.getElementById("coreSignal");
+const csCtx = coreSignal ? coreSignal.getContext("2d") : null;
+let csW = 0, csH = 0;
+if (coreSignal) {
+  new ResizeObserver(() => {
+    const r = coreSignal.getBoundingClientRect();
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    coreSignal.width = Math.max(1, Math.round(r.width * dpr));
+    coreSignal.height = Math.max(1, Math.round(r.height * dpr));
+    csW = coreSignal.width; csH = coreSignal.height;
+  }).observe(coreSignal);
+}
+
 function rms(data) {
   let s = 0;
   for (let i = 0; i < data.length; i++) { const v = (data[i] - 128) / 128; s += v * v; }
   return Math.sqrt(s / data.length);
 }
-function drawTrace(data, color, gain) {
-  const n = data.length;
-  sctx.beginPath();
-  for (let i = 0; i < n; i++) {
-    const x = (i / (n - 1)) * scopeW;
-    const y = scopeH / 2 - ((data[i] - 128) / 128) * (scopeH / 2) * gain;
-    i ? sctx.lineTo(x, y) : sctx.moveTo(x, y);
+
+// Envelope: fast but smooth attack, gentle release — level breathes with the
+// voice, then decays back into idle instead of snapping off.
+function smoothEnv(env, level) {
+  return level > env ? env + (level - env) * 0.55 : env * 0.94;
+}
+
+// Light low-pass on the raw analyser data: a controlled trace, not a jitter.
+let smMic = null, smAgent = null;
+function smoothData(raw, out) {
+  for (let i = 0; i < raw.length; i++) {
+    const v = raw[i] / 128 - 1; // DC-centered -1..1
+    out[i] += (v - out[i]) * 0.45;
   }
-  sctx.strokeStyle = color;
-  sctx.lineWidth = Math.max(1, scopeH / 240);
-  sctx.shadowColor = color; // phosphor glow
-  sctx.shadowBlur = reduceMotion() ? 0 : 7;
-  sctx.stroke();
-  sctx.shadowBlur = 0;
+}
+
+function hexToRgba(hex, a) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+}
+
+// Two-pass stroke: wide faint under-swell + thin crisp core. A soft phosphor
+// trace without per-frame shadowBlur cost.
+function drawTrace(data, rgb, alpha, gain) {
+  const n = data.length;
+  const pass = (lw, a) => {
+    sctx.beginPath();
+    for (let i = 0; i < n; i++) {
+      const x = (i / (n - 1)) * scopeW;
+      const y = scopeH / 2 - data[i] * (scopeH / 2) * gain;
+      i ? sctx.lineTo(x, y) : sctx.moveTo(x, y);
+    }
+    sctx.strokeStyle = `rgba(${rgb},${a})`;
+    sctx.lineWidth = lw;
+    sctx.lineJoin = "round";
+    sctx.stroke();
+  };
+  pass(Math.max(2.5, scopeH / 120), alpha * 0.16);
+  pass(Math.max(1, scopeH / 250), alpha);
 }
 
 function drawScope(ts) {
@@ -164,12 +203,18 @@ function drawScope(ts) {
   lastFrame = ts;
   const w = scopeW, h = scopeH, mid = h / 2;
 
-  // smoothed envelopes drive meters, channel LEDs and core pulse
+  // envelopes drive meters, LEDs, the core halo, and trace presence
   let micRms = 0, agentRms = 0;
-  if (analyser && micData) { analyser.getByteTimeDomainData(micData); micRms = rms(micData); }
-  if (agentAnalyser && agentData) { agentAnalyser.getByteTimeDomainData(agentData); agentRms = rms(agentData); }
-  micEnv = Math.max(micRms, micEnv * 0.88);
-  agentEnv = Math.max(agentRms, agentEnv * 0.86);
+  if (analyser && micData) {
+    analyser.getByteTimeDomainData(micData);
+    micRms = rms(micData);
+    micEnv = smoothEnv(micEnv, micRms);
+  }
+  if (agentAnalyser && agentData) {
+    agentAnalyser.getByteTimeDomainData(agentData);
+    agentRms = rms(agentData);
+    agentEnv = smoothEnv(agentEnv, agentRms);
+  }
   document.documentElement.style.setProperty("--core-env",
     (uiState === "listening" ? micEnv : uiState === "speaking" ? agentEnv : 0).toFixed(3));
   micLevel.style.width = Math.min(100, micEnv * 260) + "%";
@@ -179,45 +224,98 @@ function drawScope(ts) {
 
   // graticule
   sctx.clearRect(0, 0, w, h);
-  sctx.strokeStyle = "rgba(96,130,170,0.09)";
+  sctx.strokeStyle = "rgba(96,130,170,0.08)";
   sctx.lineWidth = 1;
   sctx.beginPath();
   for (let i = 1; i < 12; i++) { const x = Math.round((i / 12) * w) + 0.5; sctx.moveTo(x, 0); sctx.lineTo(x, h); }
   for (let j = 1; j < 4; j++) { const y = Math.round((j / 4) * h) + 0.5; sctx.moveTo(0, y); sctx.lineTo(w, y); }
   sctx.stroke();
-  sctx.strokeStyle = "rgba(96,130,170,0.18)";
+  sctx.strokeStyle = "rgba(96,130,170,0.14)";
   sctx.beginPath(); sctx.moveTo(0, mid + 0.5); sctx.lineTo(w, mid + 0.5); sctx.stroke();
 
   const stateColor = scopeStateColor;
 
-  if (analyser && micData && micRms > 0.004) drawTrace(micData, "rgba(74,222,128,0.9)", 1.15);
-  if (agentAnalyser && agentData && agentRms > 0.004) drawTrace(agentData, "rgba(251,191,36,0.9)", 1.15);
+  // live traces — gated on the smoothed envelope so they fade out, not snap
+  if (analyser && micData && micEnv > 0.003) {
+    if (!smMic || smMic.length !== micData.length) smMic = new Float32Array(micData.length);
+    smoothData(micData, smMic);
+    drawTrace(smMic, "74,222,128", Math.min(1, 0.34 + micEnv * 3), 1.05);
+  }
+  if (agentAnalyser && agentData && agentEnv > 0.003) {
+    if (!smAgent || smAgent.length !== agentData.length) smAgent = new Float32Array(agentData.length);
+    smoothData(agentData, smAgent);
+    drawTrace(smAgent, "251,191,36", Math.min(1, 0.34 + agentEnv * 3), 1.05);
+  }
 
-  // idle: state-colored baseline + slow sweep
-  if (micRms <= 0.004 && agentRms <= 0.004) {
-    sctx.beginPath();
-    for (let x = 0; x <= w; x += 6) {
-      const y = mid + Math.sin(x * 0.045 + ts * 0.0022) * (reduceMotion() ? 0 : 1.6);
-      x ? sctx.lineTo(x, y) : sctx.moveTo(x, y);
-    }
+  // calm idle: a still, state-flushed baseline; while connecting/thinking a
+  // single slow signal pulse travels it (system establishing / processing).
+  if (micEnv <= 0.003 && agentEnv <= 0.003) {
+    const busy = uiState === "connecting" || uiState === "thinking";
     sctx.strokeStyle = stateColor;
-    sctx.globalAlpha = 0.55;
-    sctx.lineWidth = 1.2;
-    sctx.stroke();
+    sctx.globalAlpha = busy ? 0.38 : 0.26;
+    sctx.lineWidth = 1;
+    sctx.beginPath(); sctx.moveTo(0, mid + 0.5); sctx.lineTo(w, mid + 0.5); sctx.stroke();
     sctx.globalAlpha = 1;
-    if (!reduceMotion()) {
-      const sx = ((ts / 7000) % 1) * w;
-      const grad = sctx.createLinearGradient(sx - 40, 0, sx, 0);
-      grad.addColorStop(0, "rgba(255,255,255,0)");
-      grad.addColorStop(1, stateColor);
-      sctx.globalAlpha = 0.28;
+    if (busy && !reduceMotion()) {
+      const period = uiState === "connecting" ? 2600 : 3800;
+      const sx = ((ts % period) / period) * w;
+      const head = 26;
+      const grad = sctx.createLinearGradient(sx - head, 0, sx, 0);
+      grad.addColorStop(0, hexToRgba(stateColor, 0));
+      grad.addColorStop(1, hexToRgba(stateColor, 0.5));
       sctx.strokeStyle = grad;
-      sctx.beginPath(); sctx.moveTo(sx - 40, 0); sctx.lineTo(sx, h); sctx.stroke();
-      sctx.globalAlpha = 1;
+      sctx.lineWidth = 1.4;
+      sctx.beginPath(); sctx.moveTo(sx - head, mid + 0.5); sctx.lineTo(sx, mid + 0.5); sctx.stroke();
     }
   }
+
+  drawSignalCore(ts);
 }
 requestAnimationFrame(drawScope);
+
+// ---- core ring: static hairline + one arc gliding around it ----
+// The arc is a "signal pulse": slow calm travel at rest, slightly faster while
+// the system connects/processes, and it stretches with input energy while the
+// voice is live — so louder speech reads as a longer signal, not a bounce.
+function drawSignalCore(ts) {
+  if (!coreSignal || !csCtx || !csW || !csH) return;
+  const cx = csW / 2, cy = csH / 2, R = Math.min(csW, csH) / 2 - 2;
+  csCtx.clearRect(0, 0, csW, csH);
+
+  const live = (uiState === "listening" || uiState === "transcribing") ? micEnv
+    : uiState === "speaking" ? agentEnv : 0;
+  const awake = uiState === "connecting" || uiState === "thinking" || live > 0.004;
+  const color = scopeStateColor;
+
+  csCtx.lineWidth = 1;
+  csCtx.strokeStyle = hexToRgba(color, awake ? 0.55 : 0.24);
+  csCtx.beginPath(); csCtx.arc(cx, cy, R, 0, Math.PI * 2); csCtx.stroke();
+
+  if (reduceMotion()) return; // static ring only
+
+  let lap, arc, alpha;
+  if (uiState === "connecting" || uiState === "thinking") {
+    lap = uiState === "connecting" ? 2600 : 3600;
+    arc = 0.14;
+    alpha = 0.6;
+  } else if (live > 0.004) {
+    lap = 7200;
+    arc = Math.min(0.5, 0.1 + live * 2.4);
+    alpha = 0.85;
+  } else {
+    lap = 9000;
+    arc = 0.07;
+    alpha = 0.4;
+  }
+  const t = (ts % lap) / lap;
+  const a0 = t * Math.PI * 2;
+  const a1 = a0 + arc * Math.PI * 2;
+  csCtx.lineWidth = 2;
+  csCtx.strokeStyle = hexToRgba(color, alpha);
+  csCtx.lineCap = "round";
+  csCtx.beginPath(); csCtx.arc(cx, cy, R, a0, a1); csCtx.stroke();
+  csCtx.lineCap = "butt";
+}
 
 // ---- transcript: signal-log rows (time · tag · text), partials with caret ----
 const TAGS = { u: "USER", a: "CIRCUITMATE", sys: "SYSTEM", tool: "TOOL" };
