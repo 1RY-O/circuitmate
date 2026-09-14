@@ -155,7 +155,20 @@ body > * { position: relative; z-index: 1; }
 }
 .top-status { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .top-hint { color: var(--faint); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.session-label { font-size: 10.5px; color: var(--faint); letter-spacing: .06em; }
+.session-label {
+  font-size: 10.5px;
+  color: var(--faint);
+  letter-spacing: .06em;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 2px 8px;
+  background: var(--panel-inset);
+}
+.session-label.is-open {
+  color: var(--green);
+  border-color: rgba(74,222,128,.4);
+  background: rgba(74,222,128,.06);
+}
 
 .badge {
   font-family: var(--mono);
@@ -423,37 +436,38 @@ body > * { position: relative; z-index: 1; }
 .status-readout {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 10px;
   font-family: var(--mono);
   border: 1px solid var(--line-strong);
   background: var(--panel-inset);
   border-color: color-mix(in srgb, var(--state) 45%, var(--line));
   background-color: color-mix(in srgb, var(--state) 8%, transparent);
-  padding: 5px 13px;
-  border-radius: 5px;
+  padding: 7px 16px;
+  border-radius: 6px;
   transition: border-color .3s, background-color .3s;
   white-space: nowrap;
+  box-shadow: 0 0 18px -8px var(--state-glow);
 }
 .status-dot {
-  width: 8px; height: 8px;
+  width: 10px; height: 10px;
   border-radius: 50%;
   background: var(--state);
-  box-shadow: 0 0 10px var(--state-glow), 0 0 3px var(--state);
+  box-shadow: 0 0 12px var(--state-glow), 0 0 4px var(--state);
   transition: background .3s;
 }
 .status-text {
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 700;
   letter-spacing: .2em;
   color: var(--state);
   transition: color .3s;
 }
 .status-sub {
-  margin: 7px 0 14px;
-  font-size: 12.5px;
+  margin: 8px 0 14px;
+  font-size: 13px;
   font-weight: 300;
   color: var(--dim);
-  min-height: 19px;
+  min-height: 20px;
 }
 
 /* ── scope — the instrument bezel ────────────────────────── */
@@ -907,13 +921,15 @@ body[data-state="error"] .core-ripple.r2 { animation-delay: .45s; }
   .console { padding: 2px 0; }
   .console-head { flex-direction: column; }
   .scope-wrap { height: clamp(210px, 42vw, 270px); }
-  .core { width: 86px; }
+  .core { width: 104px; }
   .tr { grid-template-columns: max-content 1fr; }
   .tr-time { display: none; }
   .transport { flex-wrap: wrap; }
-  .transport .btn { flex: 1 1 auto; min-height: 44px; }
+  .transport .btn { flex: 1 1 auto; min-height: 48px; }
+  .transport .btn:first-child { flex-basis: 100%; }
   .session-label { display: none; }
   .status-readout { align-self: flex-start; }
+  .status-text { font-size: 15px; }
   .demo-banner { flex-wrap: wrap; gap: 6px 10px; }
 }
 

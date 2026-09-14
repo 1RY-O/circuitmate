@@ -14,14 +14,15 @@ const stateText = $("stateText"), stateSub = $("stateSub");
 const micLevel = $("micLevel"), agentLevel = $("agentLevel");
 const logEl = $("log"), cardsEl = $("cards"), checklistEl = $("checklist"), toolBusEl = $("toolBus");
 const startBtn = $("startBtn"), endBtn = $("endBtn"), interruptBtn = $("interruptBtn");
-const coreBtn = $("coreBtn"), coreLabel = $("coreLabel"), mockBtn = $("mockBtn");
+const coreBtn = $("coreBtn"), coreLabel = $("coreLabel");
 const transportLog = $("transportLog");
 const roKnown = $("roKnown"), roUnknown = $("roUnknown"), roHypo = $("roHypo"), roNext = $("roNext");
 const progFill = $("progFill"), progText = $("progText");
 const scope = $("scope"), textInput = $("textInput");
 const sctx = scope.getContext("2d");
 
-const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const mqReduce = matchMedia("(prefers-reduced-motion: reduce)");
+const reduceMotion = () => mqReduce.matches;
 
 // ---- mode is explicit: 'live' | 'mock' | 'error'. Never a silent fake AI. ----
 let mode = "live";
@@ -35,12 +36,6 @@ function setMode(m, label) {
       ? "offline demo — type to drive the diagnostic tools…"
       : m === "error" ? "unavailable — fix the connection first…"
       : "type a note — inside a live call it reaches the agent…";
-  }
-  if (mockBtn) {
-    mockBtn.textContent = m === "mock" ? "GO LIVE" : "OFFLINE";
-    mockBtn.title = m === "mock"
-      ? "Leave demo mode and retry the live voice agent"
-      : "Explicit offline tool test — never automatic";
   }
 }
 
@@ -71,6 +66,7 @@ function setState(s, sub) {
   clearTimeout(stateTimer);
   uiState = s.toLowerCase();
   document.body.dataset.state = uiState;
+  refreshScopeColor();
   const label = DISPLAY_STATE[s] ?? s;
   const scopeState = document.getElementById("scopeState"); // bezel readout stays in sync even without the motion layer
   if (scopeState) scopeState.textContent = label;
@@ -81,6 +77,52 @@ function setState(s, sub) {
 function setStateThen(s, sub, backTo, backSub, ms) {
   setState(s, sub);
   stateTimer = setTimeout(() => { if (uiState === s.toLowerCase()) setState(backTo, backSub); }, ms);
+}
+
+// ---- friendly status + error text (never expose internals) ----
+const FRIENDLY_EVENT = {
+  "session.ready": "channel open",
+  "input.speech.started": "hearing you…",
+  "input.speech.stopped": "turn captured",
+  "transcript.user.delta": "capturing…",
+  "transcript.user": "turn captured",
+  "reply.started": "agent speaking…",
+  "reply.audio": "agent speaking…",
+  "transcript.agent.delta": "agent speaking…",
+  "transcript.agent": "agent reply complete",
+  "reply.done": "reply complete",
+  "tool.call": "running diagnostic tool…",
+  "session.ended": "channel closed",
+  "session.error": "agent error",
+  "error": "error",
+};
+function setTransport(text) { transportLog.textContent = text; }
+
+function friendlyError(what) {
+  const s = String(what ?? "");
+  if (/token endpoint HTTP \d+/.test(s)) return "The voice service couldn't be reached. Check your connection and try again.";
+  if (/token request failed/.test(s)) return "Couldn't reach the server. Check that it's running and try again.";
+  if (/token endpoint returned no token/.test(s)) return "The voice service didn't return a token. Try again in a moment.";
+  if (/mic blocked/.test(s)) return "Microphone access was blocked. Allow mic permission in your browser, then try again.";
+  if (/could not reach \/api\/config/.test(s)) return "Couldn't reach the server. Check that it's running and refresh.";
+  if (/socket closed code=1006/.test(s)) return "The voice connection dropped before it opened. Try again — a fresh connection is created each time.";
+  if (/socket closed/.test(s)) return "The voice connection dropped. Press START to reconnect.";
+  if (/connect failed/.test(s)) return "Couldn't open the voice connection. Check your network and try again.";
+  if (/agent started a reply/.test(s)) return "The agent replied but no audio came through. Check your speakers or volume, then try again.";
+  if (/reply completed with zero audio/.test(s)) return "The agent replied but no audio came through. Check your speakers or volume, then try again.";
+  if (/audio playback failed/.test(s)) return "Audio playback failed. Check your speakers or volume, then try again.";
+  if (/bad server frame/.test(s)) return "The voice service sent an unexpected message. Try again.";
+  if (/WebSocket error/.test(s)) return "The voice connection hit an error. Try again — a fresh connection is created each time.";
+  if (/not connected/.test(s)) return "You're not connected yet. Press START CALL first.";
+  if (/tool .* failed/.test(s)) return "A diagnostic tool failed. Check your connection and try again.";
+  return s.length > 0 ? s : "Something went wrong. Try again.";
+}
+
+// ---- async start cancellation + cached scope color ----
+let abortStart = false;
+let scopeStateColor = "#64748b";
+function refreshScopeColor() {
+  scopeStateColor = getComputedStyle(document.body).getPropertyValue("--state").trim() || "#64748b";
 }
 
 // ---- oscilloscope: CH1 mic (green, live analyser) · CH2 agent (amber, playback tap) ----
@@ -110,7 +152,7 @@ function drawTrace(data, color, gain) {
   sctx.strokeStyle = color;
   sctx.lineWidth = Math.max(1, scopeH / 240);
   sctx.shadowColor = color; // phosphor glow
-  sctx.shadowBlur = reduceMotion ? 0 : 7;
+  sctx.shadowBlur = reduceMotion() ? 0 : 7;
   sctx.stroke();
   sctx.shadowBlur = 0;
 }
@@ -118,7 +160,7 @@ function drawTrace(data, color, gain) {
 function drawScope(ts) {
   requestAnimationFrame(drawScope);
   if (!scopeW) return;
-  if (reduceMotion && ts - lastFrame < 220) return;
+  if (reduceMotion() && ts - lastFrame < 220) return;
   lastFrame = ts;
   const w = scopeW, h = scopeH, mid = h / 2;
 
@@ -146,7 +188,7 @@ function drawScope(ts) {
   sctx.strokeStyle = "rgba(96,130,170,0.18)";
   sctx.beginPath(); sctx.moveTo(0, mid + 0.5); sctx.lineTo(w, mid + 0.5); sctx.stroke();
 
-  const stateColor = getComputedStyle(document.body).getPropertyValue("--state").trim() || "#64748b";
+  const stateColor = scopeStateColor;
 
   if (analyser && micData && micRms > 0.004) drawTrace(micData, "rgba(74,222,128,0.9)", 1.15);
   if (agentAnalyser && agentData && agentRms > 0.004) drawTrace(agentData, "rgba(251,191,36,0.9)", 1.15);
@@ -155,7 +197,7 @@ function drawScope(ts) {
   if (micRms <= 0.004 && agentRms <= 0.004) {
     sctx.beginPath();
     for (let x = 0; x <= w; x += 6) {
-      const y = mid + Math.sin(x * 0.045 + ts * 0.0022) * (reduceMotion ? 0 : 1.6);
+      const y = mid + Math.sin(x * 0.045 + ts * 0.0022) * (reduceMotion() ? 0 : 1.6);
       x ? sctx.lineTo(x, y) : sctx.moveTo(x, y);
     }
     sctx.strokeStyle = stateColor;
@@ -163,7 +205,7 @@ function drawScope(ts) {
     sctx.lineWidth = 1.2;
     sctx.stroke();
     sctx.globalAlpha = 1;
-    if (!reduceMotion) {
+    if (!reduceMotion()) {
       const sx = ((ts / 7000) % 1) * w;
       const grad = sctx.createLinearGradient(sx - 40, 0, sx, 0);
       grad.addColorStop(0, "rgba(255,255,255,0)");
@@ -209,7 +251,7 @@ const KNOWN_PATTERNS = [
 const SYMPTOM_RE = /\b(won'?t|wouldn'?t|doesn'?t|not working|no power|nothing|dim|resets?|restarts?|randomly|garbage|nan|boot ?loops?|jitters?|hums?|dead|broken|fails?|failed|disconnects?|no light|smoke|burning|hot)\b/i;
 
 function flash(panel) {
-  if (reduceMotion) return;
+  if (reduceMotion()) return;
   panel.classList.remove("flash"); void panel.offsetWidth; panel.classList.add("flash");
 }
 function renderKnown() {
@@ -313,10 +355,10 @@ async function runToolLocal(name, args) {
   try {
     r = await fetch(`/api/tool/${name}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(args ?? {}) });
     data = await r.json();
-  } catch (e) {
+  } catch {
     tb.led.className = "tb-led err"; tb.inf.textContent = "fetch failed";
-    logErr(`tool ${name} failed: ${e.message}`);
-    return { error: e.message };
+    logErr("A diagnostic tool failed. Check your connection and try again.");
+    return { error: "fetch failed" };
   }
   const ms = Math.max(1, Math.round(performance.now() - t0));
   tb.led.className = "tb-led " + (r.ok ? "ok" : "err");
@@ -353,12 +395,13 @@ async function flushToolsIfIdle() {
 
 // ---- voice agent events → state machine + readouts ----
 function onEvent(msg) {
-  transportLog.textContent = msg.type;
+  setTransport(FRIENDLY_EVENT[msg.type] ?? "channel update");
   switch (msg.type) {
     case "session.updated": break;
     case "session.ready":
       ready = true; sessionId = msg.session_id;
-      sessionLabel.textContent = "SESSION " + String(sessionId).slice(0, 8);
+      sessionLabel.textContent = "CHANNEL OPEN";
+      sessionLabel.classList.add("is-open");
       if (demoBanner) demoBanner.hidden = true;
       setState("LISTENING", "speak freely — interrupt anytime");
       log("sys", "Channel open — start speaking.");
@@ -397,7 +440,7 @@ function onEvent(msg) {
     case "reply.started":
       lastEvent = msg.type;
       replyT0 = performance.now();
-      if (thinkT0) transportLog.textContent += ` (+${Math.round(replyT0 - thinkT0)}ms since speech end)`;
+      if (thinkT0) setTransport(`agent speaking… (${Math.round(replyT0 - thinkT0)}ms to respond)`);
       thinkT0 = 0;
       agentRow = mkRow("a"); agentRow.row.classList.add("partial");
       replyAudioCount = 0;
@@ -412,7 +455,7 @@ function onEvent(msg) {
       break;
     case "reply.audio":
       if (replyAudioCount === 0 && replyT0) {
-        transportLog.textContent = `reply.audio (+${Math.round(performance.now() - replyT0)}ms since reply start)`;
+        setTransport(`agent speaking… (${Math.round(performance.now() - replyT0)}ms to first audio)`);
       }
       replyAudioCount++;
       playChunk(msg.data);
@@ -454,12 +497,13 @@ function onEvent(msg) {
       break;
     case "session.error":
     case "error":
-      setState("ERROR", "agent error — START retries");
-      logErr(`${msg.code ?? ""} ${msg.message ?? JSON.stringify(msg)}`.trim());
+      setState("ERROR", "the agent hit an error — press START to retry");
+      logErr("The voice agent hit an error. Press START to retry.");
       setButtons();
       break;
     default:
-      log("sys", "event: " + msg.type);
+      // Unknown events are ignored — the UI only reacts to known protocol events.
+      break;
   }
 }
 
@@ -484,11 +528,11 @@ function playChunk(b64data) {
     playSources.push(src);
     if (playSources.length > 64) playSources.splice(0, playSources.length - 64);
   } catch (e) {
-    logErr("audio playback failed: " + e.message);
+    logErr("Audio playback failed. Check your speakers or volume, then try again.");
   }
 }
 function flushPlayback() {
-  for (const s of playSources) { try { s.stop(); } catch {} }
+  for (const s of playSources) { try { s.stop(); } catch { /* already stopped */ } }
   playSources = [];
   if (audioCtx) playbackTime = audioCtx.currentTime;
 }
@@ -497,10 +541,11 @@ function flushPlayback() {
 function enterError(what) {
   cleanup();
   setMode("error", "ERROR");
-  setState("ERROR", what.slice(0, 80));
-  logErr(what);
+  const friendly = friendlyError(what);
+  setState("ERROR", friendly.slice(0, 120));
+  logErr(friendly);
   if (demoBanner && demoBannerText) {
-    demoBannerText.textContent = "Live voice failed: " + what.slice(0, 160);
+    demoBannerText.textContent = "Live voice failed: " + friendly.slice(0, 160);
     demoBanner.hidden = false;
   }
 }
@@ -508,12 +553,14 @@ function enterError(what) {
 async function startCall() {
   if (mode === "mock") { log("sys", "Demo mode is ON — press the core anyway to retry live (token is fetched again)."); }
   if (ws) return;
+  abortStart = false;
   resetDiag();
   setState("CONNECTING", "fetching single-use token…");
   // 1. Fresh single-use token per connection (server holds the real key).
   let token = null;
   try {
     const r = await fetch("/api/voice-token");
+    if (abortStart) return;
     if (!r.ok) {
       const body = (await r.text()).slice(0, 160);
       enterError(`token endpoint HTTP ${r.status}: ${body || "no detail"}. Server needs a valid ASSEMBLYAI_API_KEY.`);
@@ -521,17 +568,22 @@ async function startCall() {
     }
     token = (await r.json()).token;
   } catch (e) {
+    if (abortStart) return;
     enterError("token request failed (server unreachable?): " + e.message);
     return;
   }
+  if (abortStart) return;
   if (!token) { enterError("token endpoint returned no token."); return; }
 
   // 2. Mic with echo cancellation ON, noise suppression OFF (server denoises).
   try {
     audioCtx = new AudioContext(); // device rate; worklet resamples to 24k
     await audioCtx.resume();
+    if (abortStart) { cleanup(); return; }
     await audioCtx.audioWorklet.addModule("/pcm-processor.js");
+    if (abortStart) { cleanup(); return; }
     micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: false } });
+    if (abortStart) { cleanup(); return; }
     const src = audioCtx.createMediaStreamSource(micStream);
     analyser = audioCtx.createAnalyser(); analyser.fftSize = 512;
     micData = new Uint8Array(analyser.frequencyBinCount);
@@ -552,11 +604,13 @@ async function startCall() {
       }
     };
   } catch (e) {
+    if (abortStart) return;
     enterError("mic blocked: " + e.message + " (need localhost/https + permission).");
     return;
   }
 
   // 3. WS with token only (no Authorization header in browser).
+  if (abortStart) { cleanup(); return; }
   cleanEnd = false;
   const u = new URL(cfg.wsUrl);
   u.searchParams.set("token", token);
@@ -568,22 +622,22 @@ async function startCall() {
       : { system_prompt: INLINE_FALLBACK_PROMPT, greeting: "Hey, CircuitMate here. What are you building?", tools: TOOLS, input: { keyterms: ["Arduino", "ESP32", "breadboard", "GPIO", "PWM", "MQTT", "MOSFET", "resistor"] }, output: { voice: "alba" } };
     ws.send(JSON.stringify({ type: "session.update", session }));
   };
-  ws.onmessage = (ev) => { try { onEvent(JSON.parse(ev.data)); } catch (e) { logErr("bad server frame: " + e.message); } };
+  ws.onmessage = (ev) => { try { onEvent(JSON.parse(ev.data)); } catch { logErr("The voice service sent an unexpected message. Try again."); } };
   ws.onclose = (ev) => {
-    ready = false;
-    setButtons();
-    if (cleanEnd || ev.code === 1000) return; // deliberate end / session.ended
-    if (sessionId) {
-      setState("ERROR", `socket closed (${ev.code}) — START resumes within 30s`);
-      logErr(`socket closed code=${ev.code}. ` + (ev.code === 1006
-        ? "Dropped before handshake: bad/expired single-use token, network, or mixed-content block. START fetches a fresh token."
-        : "Press START to resume within the 30s grace window."));
-    } else if (mode === "live") {
-      setState("ERROR", `connect failed (${ev.code}) — see transcript`);
-      logErr(`socket closed code=${ev.code} before session.ready. Token failures surface here as 1006 — check /api/voice-token.`);
+    const wasClean = cleanEnd || ev.code === 1000;
+    const hadSession = Boolean(sessionId);
+    const wasLive = mode === "live";
+    cleanup();
+    if (wasClean) return;
+    if (hadSession) {
+      setState("ERROR", "connection dropped — press START to reconnect");
+      logErr("The voice connection dropped. Press START to reconnect.");
+    } else if (wasLive) {
+      setState("ERROR", "couldn't open the voice connection");
+      logErr("Couldn't open the voice connection. Check your network and try again.");
     }
   };
-  ws.onerror = () => log("sys", "WebSocket error (tokens are single-use — a stale token is the usual cause).");
+  ws.onerror = () => log("sys", "The voice connection hit an error. Try again — a fresh connection is created each time.");
 }
 
 function endCall() {
@@ -594,9 +648,11 @@ function endCall() {
   } else cleanup();
 }
 function cleanup() {
+  abortStart = true;
   clearTimeout(replyWatchdog);
   try { ws?.close(); } catch {}
   ws = null; ready = false; lastEvent = null; pendingTools = [];
+  sessionId = null;
   userRow = agentRow = null;
   analyser = agentAnalyser = micData = agentData = null;
   micEnv = agentEnv = 0;
@@ -604,10 +660,13 @@ function cleanup() {
   try { micStream?.getTracks().forEach((t) => t.stop()); } catch {}
   try { audioCtx?.close(); } catch {}
   micStream = worklet = audioCtx = null;
-  setButtons();
+  sessionLabel.textContent = "STANDBY";
+  sessionLabel.classList.remove("is-open");
+  setState("READY", "press the core to open the channel");
 }
 window.addEventListener("pagehide", () => {
   try { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: "session.end" })); } catch {}
+  cleanup();
 });
 
 // ---- explicit demo mode: via ?mock=1, the footer toggle, or a keyless server ----
@@ -650,9 +709,8 @@ coreBtn.onclick = () => {
   if (ws && (ready || ws.readyState === 1)) endCall();
   else if (!startBtn.disabled) startCall();
 };
-interruptBtn.onclick = () => { flushPlayback(); log("sys", "Playback flushed (voice barge-in is automatic while the agent speaks)."); };
+interruptBtn.onclick = () => { flushPlayback(); log("sys", "Audio stopped — voice barge-in is automatic while the agent speaks."); };
 $("mockToggle").onclick = toggleDemoMode;
-if (mockBtn) mockBtn.onclick = toggleDemoMode;
 function toggleDemoMode() {
   location.href = mode === "mock" ? location.pathname : location.pathname + "?mock=1";
 }
@@ -670,7 +728,7 @@ $("textForm").onsubmit = async (e) => {
     ws.send(JSON.stringify({ type: "conversation.message", role: "user", content: v }));
     ws.send(JSON.stringify({ type: "reply.create", instructions: "Answer the builder's typed message as CircuitMate, speaking directly to them in 1-3 short sentences." }));
   } else {
-    logErr("not connected — press START CALL first (typed text only works inside a live session).");
+    logErr("You're not connected yet. Press START CALL first.");
   }
 };
 

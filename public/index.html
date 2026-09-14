@@ -13,7 +13,7 @@
 </head>
 <body data-state="ready">
 
-<div id="demoBanner" class="demo-banner" hidden>
+<div id="demoBanner" class="demo-banner" role="status" hidden>
   <span class="demo-banner-tag">DEMO MODE</span>
   <span class="demo-banner-text">Voice engine offline — no <code>ASSEMBLYAI_API_KEY</code> on server. Diagnostic tools run locally; type below to drive them.</span>
 </div>
@@ -31,7 +31,7 @@
   <div class="top-status">
     <span class="top-hint" aria-hidden="true">hands-free diagnostics for electronics · IoT · robotics · code</span>
     <span id="modeBadge" class="badge" role="status">DETECTING…</span>
-    <span id="sessionLabel" class="mono session-label">NO SESSION</span>
+    <span id="sessionLabel" class="mono session-label">STANDBY</span>
   </div>
 </header>
 
@@ -44,12 +44,12 @@
         <h2 class="panel-title">VOICE CHANNEL</h2>
         <p class="console-line">Describe the fault<span class="console-line-accent"> — fix it hands-free.</span></p>
       </div>
-      <div class="status-readout">
+      <div class="status-readout" role="status">
         <span id="stateDot" class="status-dot" aria-hidden="true"></span>
-        <span id="stateText" class="status-text" aria-live="polite">IDLE</span>
+        <span id="stateText" class="status-text">IDLE</span>
       </div>
     </div>
-    <p id="stateSub" class="status-sub">press the core to open the channel</p>
+    <p id="stateSub" class="status-sub" aria-live="polite">press the core to open the channel</p>
 
     <div class="scope-wrap" id="scopeWrap">
       <canvas id="scope" aria-hidden="true"></canvas>
@@ -86,8 +86,7 @@
     <div class="transport" role="group" aria-label="Call transport" data-boot="up-late">
       <button id="startBtn" class="btn go"><span class="btn-dot" aria-hidden="true"></span>START CALL</button>
       <button id="endBtn" class="btn stop" disabled><span class="btn-dot" aria-hidden="true"></span>END</button>
-      <button id="interruptBtn" class="btn" disabled>INTERRUPT</button>
-      <button id="mockBtn" class="btn small" title="Explicit offline tool test — never automatic">OFFLINE</button>
+      <button id="interruptBtn" class="btn" disabled>STOP AUDIO</button>
     </div>
     <div id="transportLog" class="transport-log mono" aria-hidden="true">idle</div>
   </section>
@@ -184,7 +183,6 @@
   <button id="mockToggle" class="foot-link" type="button">toggle demo mode</button>
 </footer>
 
-<script defer src="/vendor/motion.js"></script>
 <script defer src="/ui-motion.js"></script>
 <script src="/app.js" type="module"></script>
 </body>

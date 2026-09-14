@@ -2,13 +2,14 @@
 // runtime assets tsc doesn't handle (static UI + knowledge JSONs) so that
 // `npm run start:prod` (node dist/src/server.js) resolves the same paths as dev.
 // Run via: npm run build
-import { cpSync, mkdirSync } from "node:fs";
+import { cpSync, mkdirSync, rmSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "..");
 
+rmSync(join(root, "dist", "public"), { recursive: true, force: true }); // mirror public/ exactly — no stale assets
 mkdirSync(join(root, "dist", "public"), { recursive: true });
 cpSync(join(root, "public"), join(root, "dist", "public"), { recursive: true });
 mkdirSync(join(root, "dist", "src", "knowledge"), { recursive: true });
