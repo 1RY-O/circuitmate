@@ -53,19 +53,32 @@ export function calcCircuit(args: {
         hint: "Ask the builder for the missing values first. Never assume 5V, a red LED, or 10mA.",
       };
     }
+    const MAX_VOLTS = 1000;
+    const MAX_CURRENT_MA = 100000;
+    const invalid = (key: "vsupply" | "vf" | "current_ma", value: number, cap: number): boolean =>
+      !(typeof value === "number" && Number.isFinite(value) && value > 0 && value <= cap);
+    if (invalid("vsupply", args.vsupply as number, MAX_VOLTS)) return { error: "'vsupply' must be a number greater than 0." };
+    if (invalid("vf", args.vf as number, MAX_VOLTS)) return { error: "'vf' must be a number greater than 0." };
+    if (invalid("current_ma", args.current_ma as number, MAX_CURRENT_MA)) return { error: "'current_ma' must be a number greater than 0." };
     const vs = args.vsupply as number;
     const vf = args.vf as number;
     const i = (args.current_ma as number) / 1000;
     if (vs <= vf) return { error: `Supply ${vs}V must exceed LED Vf ${vf}V.` };
     const exact = (vs - vf) / i;
+    if (exact > 1000000) return { error: "The computed resistor exceeds the supported range." };
     const e12 = [10, 12, 15, 18, 22, 27, 33, 39, 47, 56, 68, 82];
     let best = 10000;
+    let found = false;
     for (let decade = 1; decade <= 10000; decade *= 10) {
       for (const v of e12) {
         const r = v * decade;
-        if (r >= exact && r < best) best = r;
+        if (r >= exact && r < best) {
+          best = r;
+          found = true;
+        }
       }
     }
+    if (!found) return { error: "No E12 resistor is large enough for this circuit." };
     const actual_ma = ((vs - vf) / best) * 1000;
     const power_mw = (vs - vf) * actual_ma;
     return {

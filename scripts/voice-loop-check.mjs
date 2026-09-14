@@ -29,7 +29,7 @@ if (!KEY || !AGENT_ID) {
 }
 const only = (process.argv.find((a) => a.startsWith("--only=")) ?? "").slice(7);
 const withTools = process.argv.includes("--with-tools");
-const TOOL_BASE = "http://localhost:3000";
+const TOOL_BASE = process.env.TOOL_BASE ?? "http://localhost:3000";
 
 async function mintToken() {
   const u = new URL("https://agents.assemblyai.com/v1/token");

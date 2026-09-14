@@ -19,8 +19,8 @@ if (existsSync(join(root, ".env"))) {
 }
 const KEY = process.env.ASSEMBLYAI_API_KEY ?? env.ASSEMBLYAI_API_KEY ?? "";
 const AGENT_ID = process.env.AGENT_ID ?? env.AGENT_ID ?? "";
-const TOOL_BASE = "http://localhost:3000";
-const TMP = "C:\\Users\\ASUS\\AppData\\Local\\Temp\\opencode";
+const TOOL_BASE = process.env.TOOL_BASE ?? "http://localhost:3000";
+const TMP = process.env.TMP_WAV_DIR ?? "C:\\Users\\ASUS\\AppData\\Local\\Temp\\opencode";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function loadPCM24kMono16(path) {

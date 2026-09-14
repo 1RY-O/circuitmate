@@ -24,6 +24,24 @@ describe("tools", () => {
     assert.equal(r.recommended_ohms, 330);
     assert.ok(r.actual_current_ma > 0 && r.actual_current_ma <= 10);
   });
+  it("rejects zero/negative/missing physics instead of returning garbage", () => {
+    for (const args of [
+      { kind: "led_resistor", vsupply: 5, vf: 2.0, current_ma: 0 },
+      { kind: "led_resistor", vsupply: 5, vf: 2.0, current_ma: -10 },
+      { kind: "led_resistor", vsupply: -5, vf: 2.0, current_ma: 10 },
+      { kind: "led_resistor", vsupply: 5, vf: Number.NaN, current_ma: 10 },
+      { kind: "led_resistor", vsupply: Number.POSITIVE_INFINITY, vf: 2.0, current_ma: 10 },
+      { kind: "led_resistor", vsupply: 5, vf: 2.0, current_ma: 200000 },
+    ]) {
+      const r = calcCircuit(args) as any;
+      assert.ok(r.error, `expected error for ${JSON.stringify(args)}`);
+      assert.ok(!("recommended_ohms" in r));
+    }
+  });
+  it("returns a business error for unknown calc kinds", () => {
+    const r = calcCircuit({ kind: "woozle" }) as any;
+    assert.ok(r.error);
+  });
   it("calc refuses to invent missing values", () => {
     const r = calcCircuit({ kind: "led_resistor" }) as any;
     assert.ok(!("recommended_ohms" in r), "must not emit a resistor value without inputs");
