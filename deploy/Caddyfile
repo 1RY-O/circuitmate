@@ -1,0 +1,21 @@
+# CircuitMate — Caddy as the public TLS edge (primary).
+# Install on the host as /etc/caddy/Caddyfile, replace the domain, then:
+#   sudo systemctl enable --now caddy
+#
+# Automatic Let's Encrypt certificates; nothing else to configure for TLS.
+# The browser connects to wss://agents.assemblyai.com directly, so only plain
+# HTTP needs proxying here — no websocket upgrade directives required.
+
+circuitmate.example.com {
+	encode zstd gzip
+
+	reverse_proxy 127.0.0.1:3000 {
+		# Caddy sets X-Forwarded-For / X-Forwarded-Proto automatically;
+		# the app trusts them because TRUST_PROXY=1.
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+}

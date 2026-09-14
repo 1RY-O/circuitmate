@@ -1,0 +1,30 @@
+[Unit]
+Description=CircuitMate bench server (AssemblyAI voice copilot)
+Documentation=https://agents.assemblyai.com/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=circuitmate
+Group=circuitmate
+WorkingDirectory=/opt/circuitmate
+EnvironmentFile=/etc/circuitmate/circuitmate.env
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node dist/src/server.js
+Restart=on-failure
+RestartSec=2
+
+# Hardening. The server only reads public/, dist/src/knowledge/ and stdout —
+# it never writes to disk, so give it a strictly read-only filesystem.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+
+[Install]
+WantedBy=multi-user.target
