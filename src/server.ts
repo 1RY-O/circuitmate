@@ -363,8 +363,7 @@ export function createApp(deps: AppDeps = {}) {
             return;
           }
           await serveIndex(res);
-          logAccess(200);
-          return;
+          logAccess(200);          return;
         }
       }
 
