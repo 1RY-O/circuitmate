@@ -186,7 +186,7 @@ export function classifyIntent(message: string): { intent: Intent; topic?: strin
 
   // 3. TROUBLESHOOTING — genuine failure language + electronics context.
   const failureRe =
-    /isn'?t|aren'?t|not\s+working|not\s+turning\s+on|not\s+lighting|won'?t|doesn'?t\s+work|don'?t\s+work|keeps?\s+resetting|\bresetting\b|\bresets?\b|freez\w*|frozen|broken|\bdead\b|\bfail\w*\b|disconnect\w*|no\s+power|nothing\s+(turns|works|lights)|smoke|burning/i;
+    /isn'?t|aren'?t|not\s+working|not\s+turning\s+on|not\s+lighting|won'?t|doesn'?t|don'?t|keeps?\s+resetting|\bresetting\b|\bresets?\b|freez\w*|frozen|broken|\bdead\b|\bfail\w*\b|disconnect\w*|no\s+power|nothing\s+(turns|works|lights)|smoke|burning/i;
   if (failureRe.test(text) && ELECTRONICS_RE.test(text)) {
     return { intent: "troubleshooting", topic: intentTopic(text), confidence: 0.95 };
   }
