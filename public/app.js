@@ -606,10 +606,18 @@ function onEvent(msg) {
 }
 
 // ---- playback: 24kHz PCM16 chunks; tap an analyser for the CH2 trace ----
+// Single ordered queue: one absolute-time cursor, no overlaps. Chunks that
+// arrive while the context is suspended (autoplay policy, backgrounded tab)
+// would otherwise pile up on a frozen clock and then burst or drop.
 function playChunk(b64data) {
   try {
+    if (!audioCtx) return; // call already ended and cleaned up
+    if (audioCtx.state === "suspended") {
+      audioCtx.resume().catch(() => {});
+    }
     if (typeof b64data !== "string" || b64data.length === 0) throw new Error("empty audio payload");
     const raw = atob(b64data);
+    if (raw.length < 2 || raw.length % 2 !== 0) throw new Error("odd-length PCM payload");
     const pcm = new Int16Array(raw.length / 2);
     for (let i = 0; i < pcm.length; i++) pcm[i] = raw.charCodeAt(i * 2) | (raw.charCodeAt(i * 2 + 1) << 8);
     const f32 = new Float32Array(pcm.length);
@@ -620,12 +628,15 @@ function playChunk(b64data) {
     src.buffer = buf;
     src.connect(audioCtx.destination);
     if (agentAnalyser) src.connect(agentAnalyser);
-    playbackTime = Math.max(playbackTime, audioCtx.currentTime);
-    src.start(playbackTime);
-    playbackTime += buf.duration;
+    // Small lookahead so a late chunk never schedules in the past (overlap burst).
+    const t = Math.max(playbackTime, audioCtx.currentTime + 0.03);
+    src.start(t);
+    playbackTime = t + buf.duration;
+    src.onended = () => { const i = playSources.indexOf(src); if (i >= 0) playSources.splice(i, 1); };
     playSources.push(src);
     if (playSources.length > 64) playSources.splice(0, playSources.length - 64);
   } catch (e) {
+    try { console.warn("[circuitmate] audio chunk failed:", e && e.message ? e.message : e); } catch {}
     logErr("Audio playback failed. Check your speakers or volume, then try again.");
   }
 }
@@ -765,6 +776,13 @@ function cleanup() {
 window.addEventListener("pagehide", () => {
   try { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: "session.end" })); } catch {}
   cleanup();
+});
+// A backgrounded tab suspends the AudioContext clock; resume on return so a
+// reply in flight continues instead of piling up inaudibly and cutting off.
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && audioCtx && audioCtx.state === "suspended" && (uiState === "speaking" || uiState === "thinking")) {
+    audioCtx.resume().catch(() => {});
+  }
 });
 
 // ---- explicit demo mode: via ?mock=1, the footer toggle, or a keyless server ----
