@@ -11,6 +11,8 @@ export type KnowledgeBase = {
   safety: any[];
 };
 
+export type Intent = "knowledge" | "coding" | "project" | "troubleshooting" | "calc" | "out_of_scope";
+
 export function loadKB(): KnowledgeBase {
   const components = JSON.parse(readFileSync(join(kbDir, "components.json"), "utf8"));
   const faults = JSON.parse(readFileSync(join(kbDir, "faults.json"), "utf8"));
@@ -134,6 +136,82 @@ function scoreFault(f: any, queryTokens: string[]): { total: number; solid: numb
   return { total, solid };
 }
 
+const ELECTRONICS_RE =
+  /arduino|esp32|led|gpio|pwm|mqtt|sensor|dht|hc[-\s]?sr04|ultrasonic|i2c|motor|servo|l298n|tb6612|breadboard|resistor|capacitor|mosfet|multimeter|voltage|ohm|circuit|micropython/i;
+
+function intentTopic(text: string): string | undefined {
+  const t = text.toLowerCase();
+  if (/\barduino\b/.test(t)) return "arduino_uno";
+  if (/\besp32\b/.test(t)) return "esp32";
+  if (/\bgpio\b/.test(t)) return "gpio";
+  if (/\bpwm\b/.test(t)) return "pwm";
+  if (/\bmqtt\b|\bi2c\b/.test(t)) return "mqtt";
+  if (/\bsensor\b|\bdht\b|hc[-\s]?sr04|ultrasonic/.test(t)) return "sensors";
+  if (/\bmotor\b|\bservo\b|l298n|tb6612/.test(t)) return "motors";
+  if (/\bbreadboard\b/.test(t)) return "breadboard";
+  if (/\bled\b|\bresistor\b|\bohm\b|capacitor|multimeter|voltage|circuit/.test(t)) return "led";
+  if (/c\+\+|\bpython\b|micropython|\bcompile\b|\bsketch\b|\bfirmware\b|\bcoding\b|\bcode\b/.test(t)) return "code";
+  return undefined;
+}
+
+/**
+ * Lightweight intent router: classifies a user message before responding.
+ * Assist layer only — the LLM (or mock UI) still decides the final wording.
+ * Priority order resolves overlaps: coding > calc > troubleshooting > project > knowledge > out_of_scope.
+ */
+export function classifyIntent(message: string): { intent: Intent; topic?: string; confidence: number } {
+  const raw = String(message ?? "");
+  const text = raw.toLowerCase().trim();
+  if (!text) return { intent: "out_of_scope", confidence: 0.6 };
+  const norm = text.replace(/["'?,.!;:()]/g, " ").replace(/\s+/g, " ");
+
+  // 1. CODING — explicit programming language beats failure words ("fail to compile").
+  const codingRe = /c\+\+|\bcompile\w*|\bsketch\b|\bfirmware\b|\bmicropython\b|\bpython\b|\bcoding\b|\bcode\b|\blink\b.*\bcode\b|\bcode\b.*\b(blink|debug|error|function)\b|\bwrite\b.*\bcode\b|\bdebug\b/;
+  if (codingRe.test(text)) {
+    return { intent: "coding", topic: intentTopic(text) ?? "code", confidence: 0.9 };
+  }
+
+  // 2. CALC — explicit resistor/value calculation request (not "why"/"do I need").
+  const resistorCtx = /resistor|ohm|\u03a9/.test(text);
+  const isWhyResistor = /^why\b[\s\S]*resistor|why\s+do[\s\S]*resistor/i.test(text);
+  const explicitCalcAsk =
+    /\bshould\s+i\s+use\b/i.test(text) ||
+    /\bwhat\b[\s\S]*\b(resistor|value|ohm)[\s\S]*\buse\b/i.test(text) ||
+    /\bcalculat\w*\b[\s\S]*(resistor|ohm|value)|(\bresistor\b|\bohm\b)[\s\S]*\bcalculat\w*\b/i.test(text) ||
+    /\bhow\s+many\s+ohms\b/i.test(text) ||
+    (resistorCtx && /\d/i.test(text) && /\b(need|use|value|what|which|for|with)\b/i.test(text));
+  if (!isWhyResistor && resistorCtx && explicitCalcAsk) {
+    return { intent: "calc", topic: "led", confidence: 0.85 };
+  }
+
+  // 3. TROUBLESHOOTING — genuine failure language + electronics context.
+  const failureRe =
+    /isn'?t|aren'?t|not\s+working|not\s+turning\s+on|not\s+lighting|won'?t|doesn'?t\s+work|don'?t\s+work|keeps?\s+resetting|\bresetting\b|\bresets?\b|freez\w*|frozen|broken|\bdead\b|\bfail\w*\b|disconnect\w*|no\s+power|nothing\s+(turns|works|lights)|smoke|burning/i;
+  if (failureRe.test(text) && ELECTRONICS_RE.test(text)) {
+    return { intent: "troubleshooting", topic: intentTopic(text), confidence: 0.95 };
+  }
+
+  // 4. PROJECT — build/design/connect request with a project-domain noun.
+  const buildVerb = /\bhelp\b|\bbuild\b|\bdesign\b|\bmake\b|\bcreate\b|\bconstruct\b|\bassemble\b|\bplan\b|\bset\s*up\b|\bconnect\b|\bwire\b|\bhook\s*up\b/i.test(text);
+  const projectNoun =
+    /\brobot\b|\barduino\b|\besp32\b|\bsensor\b|\bmotor\b|\bservo\b|\biot\b|\bplant\b|\bmonitor\b|\bsmart\b|\bcircuit\b|\bdevice\b|\bsystem\b|\bproject\b|\bdrone\b|\bcar\b|\btank\b|\barm\b|\bobstacle\b|\bhome\s*automation\b/i.test(text);
+  if (buildVerb && projectNoun) {
+    return { intent: "project", topic: intentTopic(text), confidence: 0.85 };
+  }
+
+  // 5. KNOWLEDGE — explanatory question or bare electronics topic phrase.
+  const explanatory =
+    /^(why|what|how|which|when|where|is|are|do|does|can|explain|define|tell)\b|\bwhy\s+do(es)?\b|\bwhat\s+is\b|\bwhat'?s\b|\bhow\s+does\b|\bdifference\s+between\b|\bvs\.?\b|\bexplain\b|\bdefine\b|\bdo\s+i\s+need\b|\bvalue\b/i.test(text);
+  const electronicsTokens = (text.match(/arduino|esp32|led|resistor|gpio|pwm|mqtt|sensor|dht|ultrasonic|i2c|motor|servo|breadboard|capacitor|mosfet|multimeter|voltage|ohm|circuit/g) ?? []).length;
+  if (ELECTRONICS_RE.test(text) && (explanatory || electronicsTokens >= 2 || /\bneed\b.*\bresistor\b|\bresistor\b.*\bneed\b/i.test(text))) {
+    return { intent: "knowledge", topic: intentTopic(text), confidence: 0.9 };
+  }
+
+  // 6. OUT OF SCOPE — default.
+  void norm;
+  return { intent: "out_of_scope", confidence: 0.6 };
+}
+
 export function debugStep(kb: KnowledgeBase, symptom: string): Record<string, unknown> {
   const queryTokens = contentTokens(symptom);
   const scored = kb.faults
@@ -141,10 +219,11 @@ export function debugStep(kb: KnowledgeBase, symptom: string): Record<string, un
     .sort((a, b) => b.total - a.total || b.solid - a.solid);
   const best = scored[0];
   // Require at least one solid (whole-word or id) hit: never guess from noise.
+  // Softened fallback: a single gentle prompt, not a troubleshooting checklist.
   if (!best || best.solid === 0) {
     return {
       narrowed: false,
-      ask: ["What exactly happens versus what you expected?", "What changed since it last worked?", "What does the multimeter read on the supply rail?"],
+      ask: ["What exactly is happening?"],
       candidates: kb.faults.map((f: any) => f.id),
     };
   }

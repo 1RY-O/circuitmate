@@ -3,7 +3,7 @@ import { readFile, stat } from "node:fs/promises";
 import { existsSync, readFileSync } from "node:fs";
 import { join, extname, dirname, isAbsolute, relative } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { loadKB, lookupComponent, calcCircuit, debugStep, checkSafety } from "./circuit-tools.js";
+import { loadKB, lookupComponent, calcCircuit, debugStep, checkSafety, classifyIntent } from "./circuit-tools.js";
 import { FixedWindowLimiter } from "./rate-limit.js";
 import { Logger, logLevelFromEnv } from "./logger.js";
 import { makeMintToken, MintError, safeMintMessage } from "./voice-token.js";
@@ -329,6 +329,12 @@ export function createApp(deps: AppDeps = {}) {
           const warn = checkSafety(kb, symptom);
           if (warn) out.safety = warn;
           return finish(200, out);
+        }
+        if (name === "intent") {
+          const message = args.message;
+          if (typeof message !== "string") return finish(400, { error: "'message' must be a string" });
+          if (message.length > 2000) return finish(400, { error: "'message' exceeds 2000 characters" });
+          return finish(200, classifyIntent(message));
         }
         return finish(404, { error: `unknown tool '${name}'` });
       }
