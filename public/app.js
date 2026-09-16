@@ -444,7 +444,7 @@ const TOOLS = [
   { type: "function", name: "calc_circuit", description: "LED resistor / divider / ohms law math.", parameters: { type: "object", properties: { kind: { type: "string", enum: ["led_resistor", "divider", "ohms_law"] }, vsupply: { type: "number" }, vf: { type: "number" }, current_ma: { type: "number" } }, required: ["kind"] } },
   { type: "function", name: "debug_step", description: "Narrow a symptom to one next diagnostic question. Call for any not-working report.", parameters: { type: "object", properties: { symptom: { type: "string", description: "what user sees" } }, required: ["symptom"] } },
 ];
-const INLINE_FALLBACK_PROMPT = "You are CircuitMate, a hands-free bench copilot for Arduino, ESP32, electronics, IoT and robotics builders. Speak AS CircuitMate TO the builder in 1-3 short sentences, never as the user. NEVER invent board model, voltage, LED type, wiring, resistor, pin, or supply. CLASSIFY THE USER'S MESSAGE FIRST and respond in the matching mode: 1. GENERAL KNOWLEDGE -- Answer directly and clearly. Never ask for a board or symptom. 2. CODING HELP -- Answer directly. Offer writing, explaining, or debugging code. When asked to write code, give a real, working sketch or snippet. 3. PROJECT / DESIGN -- Help design it. Ask only the genuinely needed details. 4. TROUBLESHOOTING -- Only for actual failure reports. 5. OUT OF SCOPE -- Briefly redirect. Never automatically open with what board are you using? or what is the exact symptom?. "
+const INLINE_FALLBACK_PROMPT = "You are CircuitMate, a hands-free bench copilot for Arduino, ESP32, electronics, IoT and robotics builders. Speak AS CircuitMate TO the builder in 1-3 short sentences, never as the user. NEVER invent board model, voltage, LED type, wiring, resistor, pin, or supply. CLASSIFY THE USER'S MESSAGE FIRST and respond in the matching mode: 1. GENERAL KNOWLEDGE -- Answer directly and clearly. Never ask for a board or symptom. 2. CODING HELP -- Answer directly. Offer writing, explaining, or debugging code. When asked to write code, give a real, working sketch or snippet. 3. PROJECT / DESIGN -- Help design it. Ask only the genuinely needed details. 4. TROUBLESHOOTING -- Only for actual failure reports. 5. CALCULATION -- call calc_circuit when the user asks for a resistor or value and gives numbers. 6. OUT OF SCOPE -- Briefly redirect. Never automatically open with what board are you using? or what is the exact symptom?. "
 
 async function runToolLocal(name, args) {
   const tb = toolBusRow(name, "run", "…");
@@ -777,78 +777,93 @@ function enterMock(reason) {
 }
 async function mockSend(text) {
   setState("THINKING", "demo reasoning…");
-  // Classify the user's message using the server intent router
   const t = text.toLowerCase();
-  const intentResult = await fetch("/api/tool/intent", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message: text })
-  });
-  const result = await intentResult.json();
-  const intent = result.intent;
-  const confidence = result.confidence;
+  // Route through the shared server intent classifier; fall back to the
+  // previous local heuristic only if the endpoint is unreachable.
+  let routed = null;
+  try {
+    const r = await fetch("/api/tool/intent", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: text }),
+    });
+    if (r.ok) routed = await r.json();
+  } catch {
+    routed = null;
+  }
+  const intent = routed && typeof routed.intent === "string" ? routed.intent : null;
+  const confidence = routed && typeof routed.confidence === "number" ? routed.confidence : 0;
+  // Follow-up context: remember the last KB topic so a bare follow-up like
+  // "what resistor should I use with 5V?" stays on the LED topic.
+  let topic = routed && typeof routed.topic === "string" ? routed.topic : null;
+  if (topic) {
+    diag.lastTopic = topic;
+  } else if ((intent === "calc" || intent === "knowledge") && diag.lastTopic) {
+    topic = diag.lastTopic;
+  }
 
-  // If confidence is low, fall back to conversational response
-  if (confidence < 0.7) {
-    if /hello|hi|thanks|thank you/.test(t):
+  if (!intent || confidence < 0.7) {
+    if (/hello|hi|thanks|thank you/.test(t)) {
       log("a", "Hello! How can I help you today?", true);
-    else:
+    } else if (/resistor|ohm|divider/.test(t)) {
+      const vs = (t.match(/(\d+(\.\d+)?)\s*v/) ?? [])[1];
+      const ma = (t.match(/(\d+(\.\d+)?)\s*ma/) ?? [])[1];
+      const white = /white|blue/.test(t);
+      const res = await runToolLocal("calc_circuit", { kind: "led_resistor", vsupply: vs ? Number(vs) : 5, vf: white ? 3.2 : 2.0, current_ma: ma ? Number(ma) : 10 });
+      if (res.recommended_ohms) log("a", `Use a ${res.recommended_ohms} Ω resistor. ${res.note}`, true);
+      else log("a", res.error ?? "Can't compute that yet.", true);
+    } else if (/lookup|pinout|spec|pwm|mqtt|esp32|arduino|breadboard|gpio|motor|sensor/.test(t)) {
+      const m = t.match(/(arduino|esp32|breadboard|led|gpio|sensors?|motors?|pwm|mqtt|code)/);
+      const alias = { sensor: "sensors", motor: "motors" };
+      const res = await runToolLocal("lookup_component", { query: m ? (alias[m[1]] ?? m[1]) : "esp32" });
+      log("a", `Check: ${(res.gotchas ?? res.rules ?? res.checklist ?? ["see tool readout →"])?.[0] ?? "see tool readout →"}`, true);
+    } else {
       log("a", "I'm not sure how to respond to that — could you rephrase?", true);
+    }
     setState("READY", "offline demo — type again, or toggle demo mode off to go live");
     return;
   }
 
-  // Route by intent
-  if intent === "knowledge":
-    // KB-backed direct answer
-    const topic = result.topic || "led";
-    if topic === "led":
-      log("a", "An LED needs a series resistor to limit current and prevent it from burning out. The resistor value depends on your supply voltage and the LED's forward voltage: R = (Vs - Vf) / I. For example, a red LED at 5V and 10mA uses about 330Ω.", true);
-    elif topic === "pwm":
-      log("a", "PWM means Pulse Width Modulation, a way to simulate analog output by rapidly switching a pin on and off. Arduino analogWrite(pin, 0-255) uses ~490·Hz (980·Hz on pins 5,6). ESP32 uses ledcAttach with configurable frequency.", true);
-    elif topic === "gpio":
-      log("a", "GPIO means General Purpose Input/Output, pins the microprocessor uses to read sensors or control devices. Always set pinMode OUTPUT/INPUT explicitly. Never drive a pin shorted to GND/VCC. One pin ≤20mA; drive motors/relays via transistor/MOSFET.", true);
-    elif topic === "esp32":
-      log("a", "ESP32 is a 3.3V logic microcontroller with extensive GPIO (excluding strapping pins 0/2/12/15 at boot). GPIO0/2/12/15 strapping pins must not be pulled wrong at boot. Brownouts on weak USB supply can cause resets — add a 470-1000µF bulk capacitor and use a short thick cable.", true);
-    elif topic === "arduino_uno":
-      log("a", "Arduino Uno uses an ATmega328P with 5V logic, 14 digital GPIO (6 PWM: 3,5,6,9,10,11), and 6 analog inputs. Max ≥20mA per pin, ≥200mA total. Do NOT feed 5V into the 5V pin while USB is connected.", true);
-    else:
-      log("a", "CircuitMate can look up specs and pinouts for " + (topic || "this topic") + ". Ask me about Arduino, ESP32, LEDs, resistors, sensors, motors, PWM, MQTT, or breadboards.", true);
-  elif intent === "coding":
-    // Provide a real Arduino blink sketch + offer to explain/debug
-    const sketch = "const int ledPin = 13; pinMode(ledPin, OUTPUT); digitalWrite(ledPin, HIGH); delay(500); digitalWrite(ledPin, LOW); delay(500);";
-    log("a", "I can help with Arduino and MicroPython coding. Here's a basic LED blink sketch: " + sketch + ". What would you like to build or debug?", true);
-  elif intent === "project":
-    // Surface relevant KB entries and ask minimum useful questions
-    log("a", "I can help you design that project. To get started, tell me: which microcontroller are you using, what sensors or components are involved, and how will you power everything?", true);
-  elif intent === "calc":
-    // Use calc_circuit
-    const vsMatch = t.match(/(\d+(?:\.\d+)?)\s*v/);
-    const maMatch = t.match(/(\d+(?:\.\d+)?)\s*ma/);
-    const res = await runToolLocal("calc_circuit", { kind: "led_resistor", vsupply: vsMatch ? Number(vsMatch[1]) : 5, vf: 2.0, current_ma: maMatch ? Number(maMatch[1]) : 10 });
-    if res.recommended_ohms:
-      log("a", "Use a " + res.recommended_ohms + "ΩμF resistor. " + res.note, true);
-    else:
-      log("a", res.error ?? "Can't compute that yet.", true);
-  elif intent === "troubleshooting":
-    // Use debug_step
-    const debug = await runToolLocal("debug_step", { symptom: text });
-    if debug.next_question:
-      log("a", "NEXT CHECK — " + debug.next_question, true);
-      if debug.symptom:
-        diag.unknown = debug.symptom; setVal(roUnknown, diag.unknown, "");
-      hy = debug.likely_causes ?? debug.hypotheses ?? [];
-      setChecklist([debug.next_question, ...(debug.follow_ups ?? []), ...hy.map(function(c) { return "hypothesis: " + c; })]);
-      if debug.safety:
-        card("SAFETY", debug.safety, true, "warn");
-      diag.hypo = hy.length ? hy[0] : "narrowing — need one more answer";
-      setVal(roHypo, diag.hypo, "");
-      diag.next = debug.next_question; setVal(roNext, diag.next, "");
-      if debug.narrowed && diag.step < diag.total: diag.step++; renderProgress();
-  elif intent === "out_of_scope":
-    log("a", "CircuitMate helps with Arduino, ESP32, electronics, IoT, and embedded programming. I can help with circuits, coding, project design, or troubleshooting hardware problems.", true);
-
+  if (intent === "knowledge") {
+    // KB-backed direct answer: look up the topic, then explain it plainly.
+    const q = topic || "led";
+    const info = await runToolLocal("lookup_component", { query: q });
+    if (q === "led") {
+      log("a", "An LED needs a series resistor to limit current and prevent it from burning out. The value is R = (Vs - Vf) / I — for example, a red LED at 5V and 10mA uses about 330 Ω.", true);
+    } else if (q === "pwm") {
+      log("a", "PWM means Pulse Width Modulation: rapidly switching a pin on and off to fake an analog level. On Arduino use analogWrite(pin, 0-255); on ESP32 use ledcAttach with a frequency around 5 kHz for LEDs.", true);
+    } else if (q === "gpio") {
+      log("a", "GPIO means General Purpose Input/Output: the pins your board uses to read sensors or drive outputs. Set pinMode explicitly, never short a driven pin, and keep one pin near 20 mA or less.", true);
+    } else if (q === "esp32") {
+      log("a", "ESP32 is a 3.3 V board with lots of GPIO plus Wi-Fi and Bluetooth. Watch the strapping pins 0, 2, 12 and 15 at boot, and give it solid USB power so it doesn't brown out.", true);
+    } else if (q === "arduino_uno") {
+      log("a", "Arduino Uno is a 5 V ATmega328P board: 14 digital pins (6 PWM) plus 6 analog inputs, about 20 mA per pin. Great starter board, but no Wi-Fi on its own.", true);
+    } else {
+      const first = info && (info.gotchas ?? info.rules ?? info.checklist ?? [])[0];
+      log("a", first ? String(first) : "Here's what the knowledge base says — see the readout card for details.", true);
+    }
+    if (topic) diag.lastTopic = topic;
+  } else if (intent === "coding") {
+    const sketch = "const int ledPin = 13; void setup() { pinMode(ledPin, OUTPUT); } void loop() { digitalWrite(ledPin, HIGH); delay(500); digitalWrite(ledPin, LOW); delay(500); }";
+    log("a", "I can write, explain, and debug Arduino and MicroPython code. Here's a basic LED blink sketch: " + sketch + " What would you like to build or fix?", true);
+  } else if (intent === "project") {
+    if (topic && topic !== "project") await runToolLocal("lookup_component", { query: topic });
+    log("a", "I can help you design that. To size it right, tell me: which board, which sensor or actuator, and how you'll power it?", true);
+  } else if (intent === "calc") {
+    const vs = (t.match(/(\d+(\.\d+)?)\s*v/) ?? [])[1];
+    const ma = (t.match(/(\d+(\.\d+)?)\s*ma/) ?? [])[1];
+    const white = /white|blue/.test(t);
+    const res = await runToolLocal("calc_circuit", { kind: "led_resistor", vsupply: vs ? Number(vs) : 5, vf: white ? 3.2 : 2.0, current_ma: ma ? Number(ma) : 10 });
+    if (res.recommended_ohms) log("a", `Use a ${res.recommended_ohms} Ω resistor. ${res.note}`, true);
+    else log("a", res.error ?? "Can't compute that yet.", true);
+  } else if (intent === "troubleshooting") {
+    const res = await runToolLocal("debug_step", { symptom: text });
+    log("a", res.next_question ?? "What changed since it last worked?", true);
+  } else {
+    log("a", "CircuitMate helps with Arduino, ESP32, electronics, IoT, and embedded code. Ask me about a circuit, a sketch, a project, or something that's not working.", true);
+  }
   setState("READY", "offline demo — type again, or toggle demo mode off to go live");
+}
 const b64 = (buf) => { const u = new Uint8Array(buf); let s = ""; for (let i = 0; i < u.length; i++) s += String.fromCharCode(u[i]); return btoa(s); };
 
 // ---- wiring ----
