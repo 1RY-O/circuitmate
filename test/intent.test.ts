@@ -128,12 +128,12 @@ describe("classifyIntent", () => {
 
   it("classifies 'can you help me with my arduino project' does NOT classify as troubleshooting", () => {
     const result = classifyIntent("can you help me with my arduino project");
-    assert.strictNotEqual(result.intent, "troubleshooting");
+    assert.notStrictEqual(result.intent, "troubleshooting");
   });
 
   it("classifies 'why does my c++ code fail to compile' as coding (not troubleshooting)", () => {
     const result = classifyIntent("why does my c++ code fail to compile");
     assert.strictEqual(result.intent, "coding");
-    assert.strictNotEqual(result.intent, "troubleshooting");
+    assert.notStrictEqual(result.intent, "troubleshooting");
   });
 });

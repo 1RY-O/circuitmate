@@ -606,9 +606,13 @@ function onEvent(msg) {
 }
 
 // ---- playback: 24kHz PCM16 chunks; tap an analyser for the CH2 trace ----
-// Single ordered queue: one absolute-time cursor, no overlaps. Chunks that
-// arrive while the context is suspended (autoplay policy, backgrounded tab)
-// would otherwise pile up on a frozen clock and then burst or drop.
+// Single ordered queue: one absolute-time cursor, no overlaps.
+//
+// DO NOT "simplify" this: when the AudioContext is suspended (autoplay
+// policy, backgrounded tab) its currentTime freezes. Scheduling chunks
+// without resuming first advances playbackTime on a frozen clock, so the
+// queued audio piles up inaudibly and then bursts or cuts off mid-sentence
+// on resume. The resume guard + 30ms lookahead below are the fix.
 function playChunk(b64data) {
   try {
     if (!audioCtx) return; // call already ended and cleaned up
