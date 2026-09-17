@@ -13,7 +13,7 @@
     "test": "tsx --test test/*.test.ts"
   },
   "engines": {
-    "node": "22.x"
+    "node": "24s.x"
   },
   "devDependencies": {
     "@types/node": "^22.7.4",
