@@ -1,7 +1,36 @@
-# CircuitMate — bench copilot for hands-busy builders
+# CircuitMate — Volcanic Brutalist Bench Copilot
 
-Browser voice demo on the **AssemblyAI Voice Agent API** (single WebSocket: STT + LLM + TTS + turn-taking).
-Keys stay server-side; the browser gets a short-lived single-use token per call.
+**CircuitMate** is an aggressive, high-energy voice copilot engineered for hands-busy electronics, robotics, and hardware hackers working with live circuits, molten solder, and precision instruments.
+
+Powered by the **AssemblyAI Voice Agent API** over a full-duplex WebSocket connection (streaming STT + LLM reasoning + low-latency TTS + server-driven turn-taking and barge-in), CircuitMate executes zero-latency diagnostic calculations, component pinout inspections, and fault tree traversals completely hands-free.
+
+---
+
+### The Aesthetic: Volcanic Brutalism (Active Theory Inspired)
+Designed like a glowing forge console or an industrial military bench analyzer, the UI rejects soft consumer aesthetics in favor of raw mechanical energy:
+- **Obsidian & Magma Palette:** Deep `#090606` obsidian bedrock, razor-sharp `#110a0a` panels with hot magma borders (`#ff4500`), molten gold status arcs (`#ff8c00`), superheated red reasoning traces (`#ff2a00`), and crimson tripwires (`#d90429`).
+- **Zero-Radius Brutalist Geometry:** All borders, panels, and badges are sheared to hard `0px` edges with sharp 1px magma elevations.
+- **Harsh Forge Hatch & Radiant Heat Floor:** The bench backdrop trades boring blueprints for a raw diagonal cross-hatch pattern masked over an aggressive bottom-center heat source that bleeds upward under the chassis.
+- **Mitered Oscilloscope Traces & Flat-Packet Data Core:** Live audio waveforms render with mitered, jagged peaks instead of softened curves; the central HUD signal core fires flat-edged, square-capped data packets across its tracking arc.
+
+---
+
+### Core Technical Flexes
+1. **AssemblyAI Voice Agent API Integration:**
+   - Single full-duplex WebSocket (`wss://agents.assemblyai.com/v1/ws`) managing real-time STT, LLM reasoning, speech synthesis, and millisecond barge-in interruption.
+   - Client-side function tool orchestration (`lookup_component`, `calc_circuit`, `debug_step`) executing local deterministic knowledge-base lookups with zero RAG latency.
+2. **Custom Ephemeral Token Minting Server:**
+   - Master `ASSEMBLYAI_API_KEY` never touches the browser.
+   - Microservice backend mints short-lived, single-use, 120-second scoped session tokens via `GET /api/voice-token` with strict upstream error obfuscation and fixed-window layered rate limiting.
+3. **Web Audio API Worklet Resampler:**
+   - Dedicated `AudioWorkletNode` (`public/pcm-processor.js`) running on an isolated audio rendering thread.
+   - Runs the hardware `AudioContext` at native device rates (44.1kHz / 48kHz / 96kHz) so browser hardware echo cancellation remains engaged, and linearly resamples the float32 stream down to 24kHz mono PCM16 buffers before base64 ingestion. Eliminates Safari sample-rate clamp bugs and Firefox cancellation drops.
+4. **Hardened Security & Strict Content Security Policy (CSP):**
+   - Hardened HTTP headers (`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`).
+   - Locked-down CSP strictly restricting WebSocket connections and scripts (`connect-src 'self' https://agents.assemblyai.com wss://agents.assemblyai.com; default-src 'self'`).
+   - Anti-traversal static file serving preventing directory escape, with fully sanitized input validation on all circuit computation routes.
+
+---
 
 ## Quickstart
 
@@ -59,13 +88,13 @@ verbatim-symptom tool call, a disambiguating spoken answer, audio chunks, clean 
 - `src/voice-token.ts` — server-side AssemblyAI token minting with safe error mapping
 - `src/agent/circuitmate.json` — prompt, greeting, voice `alba`, keyterms, 3 tools
 - `src/circuit-tools.ts` + `src/knowledge/*.json` — small local KB (no RAG/DB)
-- `public/` — instrument UI (READY/LISTENING/THINKING/SPEAKING/INTERRUPTED), worklet, mock mode
+- `public/` — brutalist volcanic console UI, canvas oscilloscope, signal core HUD, audio worklet
 
 ## Backend API contract
 
 All `/api/*` responses are JSON, `Cache-Control: no-store`, and carry hardening headers
 (`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`,
-a strict-ish Content-Security-Policy, plus `style-src 'unsafe-inline'` for the animation lib).
+and strict Content-Security-Policy).
 
 | Endpoint | Purpose |
 | --- | --- |

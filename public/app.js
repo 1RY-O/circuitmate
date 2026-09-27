@@ -189,7 +189,7 @@ function drawTrace(data, rgb, alpha, gain) {
     }
     sctx.strokeStyle = `rgba(${rgb},${a})`;
     sctx.lineWidth = lw;
-    sctx.lineJoin = "round";
+    sctx.lineJoin = "miter";
     sctx.stroke();
   };
   pass(Math.max(2.5, scopeH / 120), alpha * 0.16);
@@ -239,12 +239,12 @@ function drawScope(ts) {
   if (analyser && micData && micEnv > 0.003) {
     if (!smMic || smMic.length !== micData.length) smMic = new Float32Array(micData.length);
     smoothData(micData, smMic);
-    drawTrace(smMic, "74,222,128", Math.min(1, 0.34 + micEnv * 3), 1.05);
+    drawTrace(smMic, "255,69,0", Math.min(1, 0.34 + micEnv * 3), 1.05);
   }
   if (agentAnalyser && agentData && agentEnv > 0.003) {
     if (!smAgent || smAgent.length !== agentData.length) smAgent = new Float32Array(agentData.length);
     smoothData(agentData, smAgent);
-    drawTrace(smAgent, "251,191,36", Math.min(1, 0.34 + agentEnv * 3), 1.05);
+    drawTrace(smAgent, "255,140,0", Math.min(1, 0.34 + agentEnv * 3), 1.05);
   }
 
   // calm idle: a still, state-flushed baseline; while connecting/thinking a
@@ -312,7 +312,7 @@ function drawSignalCore(ts) {
   const a1 = a0 + arc * Math.PI * 2;
   csCtx.lineWidth = 2;
   csCtx.strokeStyle = hexToRgba(color, alpha);
-  csCtx.lineCap = "round";
+  csCtx.lineCap = "square";
   csCtx.beginPath(); csCtx.arc(cx, cy, R, a0, a1); csCtx.stroke();
   csCtx.lineCap = "butt";
 }

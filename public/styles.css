@@ -18,39 +18,39 @@
 }
 
 :root {
-  /* surfaces */
-  --bg: #06080c;
-  --panel: #0b0f15;
-  --panel-inset: #080b10;
-  --line: #1a2230;
-  --line-strong: #2b3850;
+  /* surfaces — obsidian */
+  --bg: #090606;
+  --panel: #110a0a;
+  --panel-inset: #0d0808;
+  --line: #2a1616;
+  --line-strong: #401d1d;
 
   /* ink */
-  --txt: #dde6ef;
-  --dim: #8394ab;
-  --faint: #546077;
+  --txt: #f5ecec;
+  --dim: #a68a8a;
+  --faint: #6b5555;
 
-  /* signal colors */
-  --green: #4ade80;   /* input / ok / live     */
-  --amber: #fbbf24;   /* agent voice / warning */
-  --cyan: #38bdf8;    /* thinking / tools      */
-  --red: #f87171;     /* interrupt / error     */
+  /* signal colors — volcanic */
+  --green: #ff4500;    /* input / ok / live     — magma       */
+  --amber: #ff8c00;    /* agent voice / warning — molten gold */
+  --cyan: #ff2a00;     /* thinking / tools      — superheated */
+  --red: #d90429;      /* interrupt / error     — crimson     */
 
   /* type */
   --sans: "Space Grotesk", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
   --mono: "JetBrains Mono", "Cascadia Mono", ui-monospace, "SF Mono", Consolas, monospace;
 
-  /* rhythm */
+  /* rhythm — brutalist: sharp edges only */
   --gap: 16px;
-  --radius: 8px;
-  --radius-sm: 5px;
+  --radius: 0px;
+  --radius-sm: 0px;
 
   /* easing */
   --ease: cubic-bezier(.22,.61,.36,1);
   --ease-out: cubic-bezier(.16,1,.3,1);
 
   /* elevation */
-  --shadow-panel: 0 1px 0 rgba(255,255,255,.025) inset, 0 10px 30px -18px rgba(0,0,0,.9);
+  --shadow-panel: 0 0 0 1px rgba(255, 69, 0, 0.1), 0 10px 30px -10px rgba(0, 0, 0, 0.9);
 }
 
 /* state → signal color, consumed everywhere */
@@ -79,18 +79,17 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-/* faint blueprint grid — the bench surface */
+/* harsh diagonal hatch — forge-floor texture, lit from the heat source below */
 body::before {
   content: "";
   position: fixed;
   inset: 0;
   pointer-events: none;
   background:
-    linear-gradient(rgba(90,120,160,.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(90,120,160,.05) 1px, transparent 1px);
-  background-size: 56px 56px;
-  mask-image: radial-gradient(ellipse 90% 80% at 50% 0%, black 30%, transparent 100%);
-  -webkit-mask-image: radial-gradient(ellipse 90% 80% at 50% 0%, black 30%, transparent 100%);
+    repeating-linear-gradient(135deg, var(--line-strong) 0 1px, transparent 1px 8px),
+    repeating-linear-gradient(45deg, var(--line) 0 1px, transparent 1px 21px);
+  mask-image: radial-gradient(ellipse 130% 95% at 50% 106%, #000 0%, rgba(0,0,0,.55) 30%, transparent 74%);
+  -webkit-mask-image: radial-gradient(ellipse 130% 95% at 50% 106%, #000 0%, rgba(0,0,0,.55) 30%, transparent 74%);
   z-index: 0;
 }
 
