@@ -47,7 +47,27 @@ const BASE_HEADERS: Record<string, string> = {
   "X-Frame-Options": "DENY",
   "Referrer-Policy": "no-referrer",
   "Content-Security-Policy": CSP,
+  "Permissions-Policy": "microphone=(self), camera=(), geolocation=()",
+  // Harmless over plain HTTP (browsers ignore it there), enforced when served
+  // over HTTPS — direct or behind the Caddy/nginx edge.
+  "Strict-Transport-Security": "max-age=63072000; includeSubDomains; preload",
 };
+
+// Strict same-origin enforcement for /api: reject any request that carries an
+// Origin header that does not match this server's Host (CSRF / cross-site
+// abuse). Requests without an Origin (curl, same-origin GETs, server-to-server
+// health checks) pass. Preflights get a minimal same-origin-only allow set.
+function sameOrigin(req: IncomingMessage): boolean {
+  const origin = req.headers.origin;
+  if (typeof origin !== "string" || origin === "") return true;
+  const host = req.headers.host;
+  if (!host) return false;
+  try {
+    return new URL(origin).host === host;
+  } catch {
+    return false; // includes Origin: null (sandboxed frames, data: URLs)
+  }
+}
 
 const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -133,10 +153,20 @@ async function serveStatic(
   try {
     const st = await stat(file);
     if (st.isDirectory()) return false;
+    const ext = extname(file).toLowerCase();
+    // API responses stay no-store (set in json()); static assets cache by type:
+    // hashed-ish fonts are immutable for a year, JS/CSS revalidate after an hour
+    // (they change without a filename bump), everything else revalidates always.
+    const cacheControl =
+      ext === ".woff2"
+        ? "public, max-age=31536000, immutable"
+        : ext === ".js" || ext === ".css"
+          ? "public, max-age=3600, must-revalidate"
+          : "no-cache";
     const headers = {
       ...BASE_HEADERS,
-      "Content-Type": MIME[extname(file)] ?? "application/octet-stream",
-      "Cache-Control": "no-cache",
+      "Content-Type": MIME[ext] ?? "application/octet-stream",
+      "Cache-Control": cacheControl,
       "Content-Length": String(st.size),
     };
     res.writeHead(200, headers);
@@ -211,6 +241,40 @@ export function createApp(deps: AppDeps = {}) {
       return;
     }
     (req as { decodedPathname?: string }).decodedPathname = pathname;
+
+    const isApi = pathname === "/api" || pathname.startsWith("/api/");
+    if (isApi) {
+      // CORS preflight: answer it, but only for same-origin requests. A
+      // cross-origin preflight gets 403 with no allow headers, so the browser
+      // never follows up with the real request.
+      if (req.method === "OPTIONS") {
+        if (!sameOrigin(req)) {
+          json(res, 403, { error: "cross-origin requests are not allowed" });
+          logAccess(403);
+          return;
+        }
+        res.writeHead(204, {
+          ...BASE_HEADERS,
+          "Access-Control-Allow-Origin": req.headers.origin ?? String(req.headers.host ?? ""),
+          "Access-Control-Allow-Methods": "GET, HEAD, POST, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type",
+          "Access-Control-Max-Age": "600",
+          "Cache-Control": "no-store",
+          Vary: "Origin",
+        });
+        res.end();
+        logAccess(204);
+        return;
+      }
+      // Same-origin enforcement on every real /api request (CSRF / cross-site
+      // API abuse). Requests without an Origin header pass — that is curl,
+      // server-side scripts, and same-origin GETs from some browsers.
+      if (!sameOrigin(req)) {
+        json(res, 403, { error: "cross-origin requests are not allowed" });
+        logAccess(403);
+        return;
+      }
+    }
 
     try {
       if (req.method === "GET" && pathname === "/api/config") {
